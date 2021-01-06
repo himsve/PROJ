@@ -163,8 +163,11 @@ public:
 	{
 		m_iRows = 0;
 		m_iCols = 0;
-
-		m_data.clear();
+		
+		// TODO: Testing clang_linux error
+		// m_data.clear();
+		
+		//delete m_data;
 	}
 
 	const int &getRows() const { return m_iRows; }

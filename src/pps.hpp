@@ -47,7 +47,7 @@ private:
 protected:
 public:
 	PROJ_FOR_TEST LPZ_Pair() = default;
-	PROJ_FOR_TEST /*virtual*/ ~LPZ_Pair() = default;
+	PROJ_FOR_TEST ~LPZ_Pair() = default;
 	PROJ_FOR_TEST const PJ_LPZ &FromPoint() const { return m_fromPoint; }
 	PROJ_FOR_TEST const PJ_LPZ &ToPoint() const { return m_toPoint; }
 	PROJ_FOR_TEST const std::string Name() const
@@ -82,7 +82,7 @@ protected:
 	std::vector<LPZ_Pair> m_LpzPairList{ };
 public:
 	PROJ_FOR_TEST PointPairs();
-	PROJ_FOR_TEST /*virtual*/ ~PointPairs();
+	PROJ_FOR_TEST ~PointPairs();
 	PROJ_FOR_TEST std::vector<LPZ_Pair> &LpzPairList() { return m_LpzPairList; }
 	PROJ_FOR_TEST const PointPairs *pairsAt(double lon, double lat, double maxdist = 0.1) const;
 };
@@ -98,7 +98,7 @@ protected:
 	std::vector<std::unique_ptr<PointPairs>> m_pairs{};
 public:
 	PROJ_FOR_TEST PointPairsSet() = default;
-	PROJ_FOR_TEST /*virtual*/ ~PointPairsSet() = default;
+	PROJ_FOR_TEST ~PointPairsSet() = default;
 	PROJ_FOR_TEST static std::unique_ptr<PointPairsSet> open(PJ_CONTEXT *ctx, const std::string &sourcename, const std::string &targetname);
 	PROJ_FOR_TEST const std::string &Name() const { return m_name; }
 	PROJ_FOR_TEST void Name(std::string name) { m_name = std::move(name); }
