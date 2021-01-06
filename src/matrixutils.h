@@ -159,16 +159,14 @@ public:
 		m_data.resize(m_iRows * m_iCols);
 	}
 
+	/*
 	~matrix()
 	{
 		m_iRows = 0;
 		m_iCols = 0;
 		
-		// TODO: Testing clang_linux error
-		// m_data.clear();
-		
-		//delete m_data;
-	}
+		m_data.clear();		
+	}*/
 
 	const int &getRows() const { return m_iRows; }
 
