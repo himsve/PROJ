@@ -167,6 +167,7 @@ PJ *pj_default_destructor (PJ *P, int errlev) {   /* Destructor */
     proj_destroy (P->cart_wgs84);
     proj_destroy (P->hgridshift);
     proj_destroy (P->vgridshift);
+	proj_destroy (P->lschelmert);
 
     free (static_cast<struct pj_opaque*>(P->opaque));
     delete P;

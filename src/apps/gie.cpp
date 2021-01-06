@@ -1115,7 +1115,6 @@ static int dispatch (const char *cmnd, const char *args) {
 namespace { // anonymous namespace
 struct errno_vs_err_const {const char *the_err_const; int the_errno;};
 static const struct errno_vs_err_const lookup[] = {
-
     { "invalid_op",                              PROJ_ERR_INVALID_OP },
     { "invalid_op_wrong_syntax",                 PROJ_ERR_INVALID_OP_WRONG_SYNTAX },
     { "invalid_op_missing_arg",                  PROJ_ERR_INVALID_OP_MISSING_ARG },
@@ -1131,7 +1130,7 @@ static const struct errno_vs_err_const lookup[] = {
     { "other",                                   PROJ_ERR_OTHER },
     { "api_misuse",                              PROJ_ERR_OTHER_API_MISUSE },
     { "no_inverse_op",                           PROJ_ERR_OTHER_NO_INVERSE_OP },
-    { "network_error",                           PROJ_ERR_OTHER_NETWORK_ERROR },
+    { "network_error",                           PROJ_ERR_OTHER_NETWORK_ERROR }, 
 };
 } // anonymous namespace
 
