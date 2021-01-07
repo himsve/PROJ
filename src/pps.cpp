@@ -102,7 +102,7 @@ std::unique_ptr<PointPairsSet> PointPairsSet::open(PJ_CONTEXT *ctx, const std::s
 		auto name = feature.first;
 		auto featureSource = feature.second;
 
-		if (geoJsonTarget->FeatureExits(name))
+		if (geoJsonTarget->FeatureExits(name) == true)
 		{
 			auto featureTarget = geoJsonTarget->GetFeature(name);
 
@@ -143,12 +143,7 @@ ListOfPpSet pj_pp_init(PJ *P, const char *sourcekey, const char *targetkey)
 	std::string keyT("s");
 
 	keyS += sourcekey;
-	keyT += targetkey;
-
-	ListOfPpSet pps;
-
-	const char *sourcename = "";
-	const char *targetname = "";
+	keyT += targetkey;		
 
 	const char *sourcenames = pj_param(P->ctx, P->params, keyS.c_str()).s;
 	if (sourcenames == nullptr)
@@ -157,6 +152,11 @@ ListOfPpSet pj_pp_init(PJ *P, const char *sourcekey, const char *targetkey)
 	const char *targetnames = pj_param(P->ctx, P->params, keyT.c_str()).s;
 	if (targetnames == nullptr)
 		return {};
+
+	ListOfPpSet pps;
+
+	const char *sourcename = "";
+	const char *targetname = "";
 
 	auto listSource = internal::split(std::string(sourcenames), ',');
 
