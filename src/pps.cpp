@@ -35,6 +35,7 @@ NS_PROJ_START
 
 using namespace internal;
 
+// TODO: CSA is deactivated during test
 #ifndef __clang_analyzer__
 
 // ---------------------------------------------------------------------------
