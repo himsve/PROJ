@@ -66,7 +66,18 @@ const PointPairs *PointPairs::pairsAt(double lon, double lat, double maxdist) co
 
 std::unique_ptr<PointPairsSet> PointPairsSet::open(PJ_CONTEXT *ctx, const std::string &sourcename, const std::string &targetname)
 {
-	if (sourcename == "null" || targetname == "null")
+	if (sourcename == "null") 
+	{
+		auto set = std::unique_ptr<PointPairsSet>(new PointPairsSet());
+
+		set->m_sourceName = sourcename;
+		set->m_targetName = targetname;
+		set->m_format = "null";
+		set->m_pairs.push_back(std::unique_ptr<PointPairs>(new PointPairs()));
+
+		return set;
+	}
+	if (targetname == "null")
 	{
 		auto set = std::unique_ptr<PointPairsSet>(new PointPairsSet());
 
@@ -78,29 +89,21 @@ std::unique_ptr<PointPairsSet> PointPairsSet::open(PJ_CONTEXT *ctx, const std::s
 		return set;
 	}
 
-	const auto fpSource = FileManager::open_resource_file(ctx, sourcename.c_str());
+	auto fpSource = FileManager::open_resource_file(ctx, sourcename.c_str());
 	if (!fpSource)
-	{
-		return nullptr;
-	}
+		return nullptr;	
 	
 	auto fpTarget = FileManager::open_resource_file(ctx, targetname.c_str());
-	if (!fpTarget)
-	{
-		return nullptr;
-	}
+	if (!fpTarget)	
+		return nullptr;	
 
 	auto geoJsonSource = geoJson::GeoJson::openGeoJson(ctx, sourcename);
-	if (!geoJsonSource)
-	{
-		return nullptr;
-	}
+	if (!geoJsonSource)	
+		return nullptr;	
 
 	auto geoJsonTarget = geoJson::GeoJson::openGeoJson(ctx, targetname);
-	if (!geoJsonTarget)
-	{
-		return nullptr;
-	}
+	if (!geoJsonTarget)	
+		return nullptr;	
 
 	auto pointPairs = new PointPairs();
 
@@ -155,15 +158,11 @@ ListOfPpSet pj_pp_init(PJ *P, const char *sourcekey, const char *targetkey)
 
 	const char *sourcenames = pj_param(P->ctx, P->params, keyS.c_str()).s;
 	if (sourcenames == nullptr)
-	{
-		return {};
-	}
+		return {};	
 
 	const char *targetnames = pj_param(P->ctx, P->params, keyT.c_str()).s;
-	if (targetnames == nullptr)
-	{
-		return {};
-	}
+	if (targetnames == nullptr)	
+		return {};	
 
 	ListOfPpSet pps;
 
