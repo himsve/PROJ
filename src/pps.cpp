@@ -35,6 +35,8 @@ NS_PROJ_START
 
 using namespace internal;
 
+#ifndef __clang_analyzer__
+
 // ---------------------------------------------------------------------------
 
 PointPairs::PointPairs() = default;
@@ -88,7 +90,7 @@ std::unique_ptr<PointPairsSet> PointPairsSet::open(PJ_CONTEXT *ctx, const std::s
 
 		return set;
 	}
-
+		
 	auto fpSource = FileManager::open_resource_file(ctx, sourcename.c_str());
 	if (!fpSource)
 		return nullptr;	
@@ -219,5 +221,7 @@ PointPairs *PointPairsSet::pairsAt(double lon, double lat, double maxdist) const
 	}
 	return nullptr;
 }
+
+#endif
 
 NS_PROJ_END
