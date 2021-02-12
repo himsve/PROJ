@@ -461,7 +461,7 @@ static PJ_LPZ reverse_3d(PJ_XYZ xyz, PJ *P)
 	point.xyz = xyz;
 	auto lpz = point.lpz;
 
-	Q->maximum_dist = Q->maximum_dist == HUGE_VAL ? 0.1 : Q->maximum_dist; // Default 100 km
+	Q->maximum_dist = Q->maximum_dist == HUGE_VAL ? 100.0 : Q->maximum_dist; // Default 100 km
 
 	PointPairs *pointPairs = findPointPairs(P, Q->pps, lpz, Q->maximum_dist);
 
