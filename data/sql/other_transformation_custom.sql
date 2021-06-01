@@ -157,3 +157,89 @@ INSERT INTO "usage" VALUES(
     'EPSG','1175', -- extent
     'EPSG','1024'  -- unknown
 );
+
+INSERT INTO "vertical_crs" VALUES(
+    'PROJ',
+    'CDNORWAYHEIGHT',
+    'CD Norway height',
+    'Mean Sea Level (MSL)',
+    'EPSG',
+    '6499',
+    'EPSG',
+    '1301',
+    '0'
+);
+INSERT INTO "usage" VALUES(
+    'PROJ',
+    'CDNORWAYHEIGHT_USAGE',
+    'vertical_crs',
+    'PROJ',
+    'CDNORWAYHEIGHT',
+    'EPSG','1352',
+    'EPSG','1024'
+);
+
+INSERT INTO "other_transformation" VALUES(
+    'PROJ',
+    'CDNORWAYHEIGHT_TO_EPSG9672',
+    'Changes from CD Norway height to CD Norway depth',
+    'Change of axis positive direction from up to down.',
+    'EPSG',
+    '1068',
+    'Height Depth Reversal',
+    'PROJ','CDNORWAYHEIGHT',
+    'EPSG','9672',
+    NULL, --accuracy
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param1
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param2
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param3
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param4
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param5
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param6
+    NULL,NULL,NULL,NULL,NULL,NULL, -- param7
+    NULL,NULL,
+    '20210531', -- operation version
+    0
+);
+INSERT INTO "usage" VALUES(
+    'PROJ',
+    'CDNORWAYHEIGHT_TO_EPSG9672_USAGE',
+    'other_transformation',
+    'PROJ',
+    'CDNORWAYHEIGHT_TO_EPSG9672',
+    'EPSG','1352',
+    'EPSG','1024'
+);
+
+INSERT INTO "grid_transformation" VALUES(
+    'PROJ','EPSG_4937_TO_CDNORWAYHEIGHT','ETRS89 height to CD Norway height',
+    NULL,
+    'EPSG','9665','Geographic3D to GravityRelatedHeight (gtx)',
+    'EPSG','4937',           -- source CRS (ETRS89)
+    'PROJ','CDNORWAYHEIGHT', -- target CRS (signed CD Norway height)
+    NULL,
+    'EPSG','8666','Geoid (height correction) model file','ChartDatum_above_Ellipsoid_EUREF89_v2021a.bin',
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);
+
+INSERT INTO "usage" VALUES(
+    'PROJ',
+    'EPSG_4937_TO_CDNORWAYHEIGHT_USAGE',
+    'grid_transformation',
+    'PROJ',
+    'EPSG_4937_TO_CDNORWAYHEIGHT',
+    'EPSG','1352', -- area of use: Norway - onshore
+    'EPSG','1024'  -- unknown
+);
+
+INSERT INTO "concatenated_operation" VALUES('PROJ','EPSG4937_TO_EPSG9672','ETRS89 height to CD Norway depth','','EPSG','4937','EPSG','9672',NULL,NULL,0);
+INSERT INTO "concatenated_operation_step" VALUES('PROJ','EPSG4937_TO_EPSG9672',1,'PROJ','EPSG_4937_TO_CDNORWAYHEIGHT');
+INSERT INTO "concatenated_operation_step" VALUES('PROJ','EPSG4937_TO_EPSG9672',2,'PROJ','CDNORWAYHEIGHT_TO_EPSG9672');
+INSERT INTO "usage" VALUES(
+    'PROJ',
+    'EPSG4937_TO_EPSG9672_USAGE',
+    'concatenated_operation',
+    'PROJ',
+    'EPSG4937_TO_EPSG9672',
+    'EPSG','1352', -- extent
+    'EPSG','1024'  -- unknown
+);
