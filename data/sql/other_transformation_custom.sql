@@ -162,7 +162,7 @@ INSERT INTO "vertical_crs" VALUES(
     'PROJ',
     'CDNORWAYHEIGHT',
     'CD Norway height',
-    'Mean Sea Level (MSL)',
+    'Chart Datum Norway height. Vertical CS Axis: height (up)',
     'EPSG',
     '6499',
     'EPSG',
