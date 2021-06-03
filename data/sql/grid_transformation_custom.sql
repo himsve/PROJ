@@ -211,3 +211,25 @@ INSERT INTO "usage" VALUES(
     'EPSG','1286', -- area of use: Europe - Liechtenstein and Switzerland
     'EPSG','1024'  -- unknown
 );
+
+-- Norway
+
+INSERT INTO "grid_transformation" VALUES(
+    'PROJ','EPSG_4937_TO_EPSG_9672','ETRS89 to ARCGP height',
+    NULL,
+    'EPSG','9665','Geographic3D to GravityRelatedHeight (gtx)',
+    'EPSG','4937', -- source CRS (ETRS89)
+    'EPSG','9672', -- target CRS (ARCGP height)
+    NULL,
+    'EPSG','8666','Geoid (height correction) model file','arcgp-2006-sk.bin',
+    NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);
+INSERT INTO "usage" VALUES(
+    'PROJ',
+    'EPSG_4937_TO_EPSG_9672_USAGE',
+    'grid_transformation',
+    'PROJ',
+    'EPSG_4937_TO_EPSG_9672',
+    'EPSG','1182', -- area of use: Norway including Svalbard - onshore and offshore.
+    'EPSG','1042'  -- accuracy: 2 meters
+);
+
