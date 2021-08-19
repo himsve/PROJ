@@ -268,23 +268,20 @@ Transformation::getTOWGS84Parameters() const // throw(io::FormattingException)
                     } else if (epsg_code ==
                                EPSG_CODE_PARAMETER_X_AXIS_ROTATION) {
                         params[3] = fixNegativeZero(
-                            rotSign *
-                            measure.convertToUnit(
-                                common::UnitOfMeasure::ARC_SECOND));
+                            rotSign * measure.convertToUnit(
+                                          common::UnitOfMeasure::ARC_SECOND));
                         foundRotX = true;
                     } else if (epsg_code ==
                                EPSG_CODE_PARAMETER_Y_AXIS_ROTATION) {
                         params[4] = fixNegativeZero(
-                            rotSign *
-                            measure.convertToUnit(
-                                common::UnitOfMeasure::ARC_SECOND));
+                            rotSign * measure.convertToUnit(
+                                          common::UnitOfMeasure::ARC_SECOND));
                         foundRotY = true;
                     } else if (epsg_code ==
                                EPSG_CODE_PARAMETER_Z_AXIS_ROTATION) {
                         params[5] = fixNegativeZero(
-                            rotSign *
-                            measure.convertToUnit(
-                                common::UnitOfMeasure::ARC_SECOND));
+                            rotSign * measure.convertToUnit(
+                                          common::UnitOfMeasure::ARC_SECOND));
                         foundRotZ = true;
                     } else if (epsg_code ==
                                EPSG_CODE_PARAMETER_SCALE_DIFFERENCE) {
@@ -369,7 +366,7 @@ TransformationNNPtr Transformation::create(
 
 // ---------------------------------------------------------------------------
 
-/** \brief Instantiate a transformation ands its OperationMethod.
+/** \brief Instantiate a transformation and its OperationMethod.
  *
  * @param propertiesTransformation The \ref general_properties of the
  * Transformation.
@@ -1992,11 +1989,25 @@ isGeographic3DToGravityRelatedHeight(const OperationMethodNNPtr &method,
         "1048", // Geographic3D to GravityRelatedHeight (Ausgeoid v2)
         "1050", // Geographic3D to GravityRelatedHeight (CI)
         "1059", // Geographic3D to GravityRelatedHeight (PNG)
+        "1088", // Geog3D to Geog2D+GravityRelatedHeight (gtx)
         "1060", // Geographic3D to GravityRelatedHeight (CGG2013)
         "1072", // Geographic3D to GravityRelatedHeight (OSGM15-Ire)
         "1073", // Geographic3D to GravityRelatedHeight (IGN2009)
         "1081", // Geographic3D to GravityRelatedHeight (BEV AT)
         "1083", // Geog3D to Geog2D+Vertical (AUSGeoid v2)
+        "1089", // Geog3D to Geog2D+GravityRelatedHeight (BEV AT)
+        "1090", // Geog3D to Geog2D+GravityRelatedHeight (CGG 2013)
+        "1091", // Geog3D to Geog2D+GravityRelatedHeight (CI)
+        "1092", // Geog3D to Geog2D+GravityRelatedHeight (EGM2008)
+        "1093", // Geog3D to Geog2D+GravityRelatedHeight (Gravsoft)
+        "1094", // Geog3D to Geog2D+GravityRelatedHeight (IGN1997)
+        "1095", // Geog3D to Geog2D+GravityRelatedHeight (IGN2009)
+        "1096", // Geog3D to Geog2D+GravityRelatedHeight (OSGM15-Ire)
+        "1097", // Geog3D to Geog2D+GravityRelatedHeight (OSGM-GB)
+        "1098", // Geog3D to Geog2D+GravityRelatedHeight (SA 2010)
+        "1100", // Geog3D to Geog2D+GravityRelatedHeight (PL txt)
+        "1103", // Geog3D to Geog2D+GravityRelatedHeight (EGM)
+        "1105", // Geog3D to Geog2D+GravityRelatedHeight (ITAL2005)
         "9661", // Geographic3D to GravityRelatedHeight (EGM)
         "9662", // Geographic3D to GravityRelatedHeight (Ausgeoid98)
         "9663", // Geographic3D to GravityRelatedHeight (OSGM-GB)
@@ -2166,14 +2177,13 @@ TransformationNNPtr Transformation::substitutePROJAlternativeGridNames(
         }
     }
     const auto &horizontalGridName =
-        !NTv1Filename.empty() ? NTv1Filename : !NTv2Filename.empty()
-                                                   ? NTv2Filename
-                                                   : lasFilename;
+        !NTv1Filename.empty()
+            ? NTv1Filename
+            : !NTv2Filename.empty() ? NTv2Filename : lasFilename;
 
-    if (!horizontalGridName.empty() &&
-        databaseContext->lookForGridAlternative(horizontalGridName,
-                                                projFilename, projGridFormat,
-                                                inverseDirection)) {
+    if (!horizontalGridName.empty() && databaseContext->lookForGridAlternative(
+                                           horizontalGridName, projFilename,
+                                           projGridFormat, inverseDirection)) {
 
         if (horizontalGridName == projFilename) {
             if (inverseDirection) {
@@ -2284,13 +2294,14 @@ TransformationNNPtr Transformation::substitutePROJAlternativeGridNames(
                         EPSG_CODE_PARAMETER_GEOID_CORRECTION_FILENAME)};
 #ifdef disabled_for_now
                 if (inverseDirection) {
-                    return create(createPropertiesForInverse(
-                                      self.as_nullable().get(), true, false),
-                                  targetCRS(), sourceCRS(), nullptr,
-                                  createSimilarPropertiesMethod(method()),
-                                  parameters, {ParameterValue::createFilename(
-                                                  projFilename)},
-                                  coordinateOperationAccuracies())
+                    return create(
+                               createPropertiesForInverse(
+                                   self.as_nullable().get(), true, false),
+                               targetCRS(), sourceCRS(), nullptr,
+                               createSimilarPropertiesMethod(method()),
+                               parameters,
+                               {ParameterValue::createFilename(projFilename)},
+                               coordinateOperationAccuracies())
                         ->inverseAsTransformation();
                 } else
 #endif
@@ -2337,7 +2348,8 @@ TransformationNNPtr Transformation::substitutePROJAlternativeGridNames(
     if (methodEPSGCode == EPSG_CODE_METHOD_VERTCON ||
         methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_NZLVD ||
         methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_BEV_AT ||
-        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_GTX) {
+        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_GTX ||
+        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_PL_TXT) {
         auto fileParameter =
             parameterValue(EPSG_NAME_PARAMETER_VERTICAL_OFFSET_FILE,
                            EPSG_CODE_PARAMETER_VERTICAL_OFFSET_FILE);
@@ -2361,13 +2373,14 @@ TransformationNNPtr Transformation::substitutePROJAlternativeGridNames(
                     createOpParamNameEPSGCode(
                         EPSG_CODE_PARAMETER_VERTICAL_OFFSET_FILE)};
                 if (inverseDirection) {
-                    return create(createPropertiesForInverse(
-                                      self.as_nullable().get(), true, false),
-                                  targetCRS(), sourceCRS(), nullptr,
-                                  createSimilarPropertiesMethod(method()),
-                                  parameters, {ParameterValue::createFilename(
-                                                  projFilename)},
-                                  coordinateOperationAccuracies())
+                    return create(
+                               createPropertiesForInverse(
+                                   self.as_nullable().get(), true, false),
+                               targetCRS(), sourceCRS(), nullptr,
+                               createSimilarPropertiesMethod(method()),
+                               parameters,
+                               {ParameterValue::createFilename(projFilename)},
+                               coordinateOperationAccuracies())
                         ->inverseAsTransformation();
                 } else {
                     return create(
@@ -2585,7 +2598,6 @@ void Transformation::_exportToPROJString(
         auto targetCRSGeog =
             dynamic_cast<const crs::GeographicCRS *>(targetCRS().get());
         const bool addPushPopV3 =
-            !CoordinateOperation::getPrivate()->use3DHelmert_ &&
             ((sourceCRSGeog &&
               sourceCRSGeog->coordinateSystem()->axisList().size() == 2) ||
              (targetCRSGeog &&
@@ -2795,14 +2807,14 @@ void Transformation::_exportToPROJString(
                                   common::UnitOfMeasure::ARC_SECOND);
 
         auto sourceCRSGeog =
-            dynamic_cast<const crs::GeographicCRS *>(sourceCRS().get());
+            extractGeographicCRSIfGeographicCRSOrEquivalent(sourceCRS());
         if (!sourceCRSGeog) {
             throw io::FormattingException(
                 "Can apply Geographic 2D offsets only to GeographicCRS");
         }
 
         auto targetCRSGeog =
-            dynamic_cast<const crs::GeographicCRS *>(targetCRS().get());
+            extractGeographicCRSIfGeographicCRSOrEquivalent(targetCRS());
         if (!targetCRSGeog) {
             throw io::FormattingException(
                 "Can apply Geographic 2D offsets only to GeographicCRS");
@@ -2921,15 +2933,28 @@ void Transformation::_exportToPROJString(
 
     if (methodEPSGCode == EPSG_CODE_METHOD_VERTICAL_OFFSET) {
 
-        auto sourceCRSVert =
-            dynamic_cast<const crs::VerticalCRS *>(sourceCRS().get());
+        const crs::CRS *srcCRS = sourceCRS().get();
+        const crs::CRS *tgtCRS = targetCRS().get();
+
+        const auto sourceCRSCompound =
+            dynamic_cast<const crs::CompoundCRS *>(srcCRS);
+        const auto targetCRSCompound =
+            dynamic_cast<const crs::CompoundCRS *>(tgtCRS);
+        if (sourceCRSCompound && targetCRSCompound &&
+            sourceCRSCompound->componentReferenceSystems()[0]->_isEquivalentTo(
+                targetCRSCompound->componentReferenceSystems()[0].get(),
+                util::IComparable::Criterion::EQUIVALENT)) {
+            srcCRS = sourceCRSCompound->componentReferenceSystems()[1].get();
+            tgtCRS = targetCRSCompound->componentReferenceSystems()[1].get();
+        }
+
+        auto sourceCRSVert = dynamic_cast<const crs::VerticalCRS *>(srcCRS);
         if (!sourceCRSVert) {
             throw io::FormattingException(
                 "Can apply Vertical offset only to VerticalCRS");
         }
 
-        auto targetCRSVert =
-            dynamic_cast<const crs::VerticalCRS *>(targetCRS().get());
+        auto targetCRSVert = dynamic_cast<const crs::VerticalCRS *>(tgtCRS);
         if (!targetCRSVert) {
             throw io::FormattingException(
                 "Can apply Vertical offset only to VerticalCRS");
@@ -2973,9 +2998,9 @@ void Transformation::_exportToPROJString(
     const auto &hGridShiftFilename =
         !HorizontalShiftGTIFFFilename.empty()
             ? HorizontalShiftGTIFFFilename
-            : !NTv1Filename.empty() ? NTv1Filename : !NTv2Filename.empty()
-                                                         ? NTv2Filename
-                                                         : CTABLE2Filename;
+            : !NTv1Filename.empty()
+                  ? NTv1Filename
+                  : !NTv2Filename.empty() ? NTv2Filename : CTABLE2Filename;
     if (!hGridShiftFilename.empty()) {
         auto sourceCRSGeog =
             extractGeographicCRSIfGeographicCRSOrEquivalent(sourceCRS());
@@ -3187,7 +3212,8 @@ void Transformation::_exportToPROJString(
 
     if (methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_NZLVD ||
         methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_BEV_AT ||
-        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_GTX) {
+        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_GTX ||
+        methodEPSGCode == EPSG_CODE_METHOD_VERTICALGRID_PL_TXT) {
         auto fileParameter =
             parameterValue(EPSG_NAME_PARAMETER_VERTICAL_OFFSET_FILE,
                            EPSG_CODE_PARAMETER_VERTICAL_OFFSET_FILE);
@@ -3270,5 +3296,5 @@ void Transformation::_exportToPROJString(
     throw io::FormattingException("Unimplemented");
 }
 
-} // namespace crs
+} // namespace operation
 NS_PROJ_END

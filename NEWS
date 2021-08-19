@@ -1,3 +1,330 @@
+8.1.0 Release Notes
+-------------------
+
+ Updates
+ -------
+
+ + Database
+
+   o Update to EPSG v10.027 (#2751)
+
+   o Decrease DB size by using WITHOUT ROWID tables (#2730) (#2647)
+
+   o Add a ANALYZE step during proj.db creation allowing for
+     faster lookups (#2729)
+
+   o Added a PROJ.VERSION metadata entry (#2646)
+
+   o Added NGO48 (EPSG:4273) to ETRS89 (EPSG:4258) triangulation-based
+     transformation (#2554)
+
+   o Additions to the norwegian NKG2020 transformation (#2548)
+
+   o ESRI projection database updated to version 12.8 (#2717)
+
+ + API additions
+
+   o Added proj_get_geoid_models_from_database() function that returns a list of
+     geoid models available for a given CRS (#2681)
+
+   o Added proj_get_celestial_body_list_from_database that returns a list
+     of celestial bodies in the PROJ database (#2667)
+
+   o Added proj_get_celestial_body_name() (#2662)
+
+ + Various improvements
+
+   o proj_trans/cs2cs: If two operations have the same accuracy,
+     use the one that is contained within a larger one (#2750)
+
+   o Share SQLite database handle among all contexts (#2738)
+
+   o Add proj/internal/mutex.hpp as compat layer for mingw32 for std::mutex (#2736)
+
+   o projsync: make it filter out files not intended for the current version (#2725)
+
+   o Improvements related to DerivedVerticalCRS using Change Unit and
+     Height/Depth reversal methods (#2696)
+
+   o Update internal nlohmann/json to 3.9.1, and add a CMake option to
+     be able to use external nlohmann/json (#2686)
+
+   o createFromUserInput(): change name of CRS built from URN combined references to match the convention of EPSG projected CRS (#2677)
+
+   o Parse compound id with two authorities, like ESRI:103668+EPSG:5703 (#2669)
+
+   o Added projinfo option --list-crs (supports --area) (#2663)
+
+   o Added support for hyperbolic Cassini-Soldner (#2637)
+
+   o Added capability to get SQL statements to add custom CRS in the database (#2577)
+
+ Bug fixes
+ ---------
+
+ o Fix 'Please include winsock2.h before windows.h' warning with msys (#2692)
+
+ o Minor changes to address lint in geodesic.c (#2752)
+
+ o BoundCRS::identify(): avoid incompatible transformation for
+   WKT1 / TOWGS84 export (#2747)
+
+ o proj_create(): do not open proj.db if string is a PROJ string,
+   even if proj_context_set_autoclose_database() has been set (#2735)
+
+ o Fix export of transformation to PROJ string in a particular situation
+   where CompoundCRS are involved (#2721)
+
+ Thanks to
+ ---------
+
+ Howard Butler
+ Alan D. Snow
+ Roel van den Berg
+ Heidi Vanparys
+ Sveinung Himle
+ 積丹尼 Dan Jacobson
+ Nyall Dawson
+ Javier Jimenez Shaw
+ Charles Karney
+ Mike Taves
+ Kristian Evers
+ Even Rouault
+
+
+8.0.1 Release Notes
+-------------------
+
+ Updates
+ -------
+
+ o Database: update to EPSG v10.018 (#2636)
+
+ o Add transformations for CHGeo2004, Swiss geoid model (#2604)
+
+ o Additions to the norwegian NKG2020 transformation (#2600)
+
+ Bug fixes
+ ---------
+
+ o pj_vlog(): fix buffer overflow in case of super lengthy error message (#2693)
+
+ o Revert "proj_create_crs_to_crs_from_pj(): do not use PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION if area is specified" (#2679)
+
+ o UTM: error out when value of +zone= is not an integer (#2672)
+
+ o getCRSInfoList(): make result order deterministic (by increasing auth_name,
+   code) (#2661)
+
+ o createOperation(): make sure no to discard deprecated operations if the
+   replacement uses an unknow grid (#2623)
+
+ o Fix build on Solaris 11.4 (#2621)
+
+ o Add mapping of ESRI Equal_Area projection method to EPSG (#2612)
+
+ o Fix incorrect EPGS extent code for EPSG:7789>EPSG:4976 NKG transformation (#2599)
+
+ o fix wrong capitalization of CHENyx06_ETRS.gsb (#2597)
+
+ o createOperations(): improve handling of vertical transforms when
+   when compound CRSs are used (#2592)
+
+ o CRS::promoteTo3D(): propagate the extent from the 2D CRS (#2589)
+
+ o createFromCRSCodesWithIntermediates(): improve performance when there is
+   no match (#2583)
+
+ o Fix proj_clone() to work on 'meta' coordinate operation PJ* objects that
+   can be returned by proj_create_crs_to_crs() (#2582)
+
+ o add PROJ_COMPUTE_VERSION, PROJ_VERSION_NUMBER,
+   PROJ_AT_LEAST_VERSION macros (#2581)
+
+ o Make proj_lp_dist() and proj_geod() work on a PJ* CRS object (#2570)
+
+ o Fix gcc 11 -Wnonnull compilation warnings (#2559)
+
+ o Fix use of uninitialized memory in gie tests (#2558)
+
+ o createOperations(): fix incorrect height transformation between 3D promoted RGF93 and CH1903+ (#2555)
+
+
+ THANKS TO
+ ---------
+
+ Dan Jacobson
+ Sveinung Himle
+ Mike Taves
+ Javier Jimenez Shaw
+ Kristian Evers
+ Even Rouault
+
+
+8.0.0 Release Notes
+-------------------
+
+With the release of PROJ 8 the proj_api.h API is finally removed. See
+https://proj.org/development/migration.html for more info on how to migrate
+from the old to the proj.h API.
+
+With the removal of proj_api.h it has been possible to simplify error codes
+and messages given by the software. The error codes are exposed in the API.
+
+Several improvements has been made to the command line utilities as well as
+tweaks in the underlying API.
+
+ Updates
+ -------
+
+ o Public header file proj_api.h removed (#837)
+
+ o Improved accuracy of the Mercator projection (#2397)
+
+ o Copyright statement wording updated (#2417)
+
+ o Allow cct to instantiate operations via object codes or names (#2419)
+
+ o Allow @filename syntax in cct (#2420)
+
+ o Added geocentric->topocentric conversion (+proj=topocentric) (#2444)
+
+ o Update GeographicLib to version 1.51 (#2445)
+
+ o Added option to allow export of Geographic/Projected 3D CRS
+   in WKT1_GDAL (#2450)
+
+ o Added --area and --bbox options in cs2cs to restrict candidate
+   coordinate operations (#2466)
+
+ o Added build time option to make PROJ_LIB env var tested last (#2476)
+
+ o Added --authority switch in cs2cs to control where coordinate operations
+   are looked for. C API function proj_create_crs_to_crs_from_pj() updated
+   accordingly (#2477)
+
+ o Error codes revised and exposed in the public API (#2487)
+
+ o Added --accuracy options to projinfo. C API function
+   proj_create_crs_to_crs_from_pj() updated accordingly (#2488)
+
+ o Added proj_crs_is_derived() function to C API (#2496)
+
+ o Enabled linking against static cURL on Windows (#2514)
+
+ o Updated ESRI CRS database to 12.7 (10.8.1/2.6) (#2519)
+
+ o Allow a WKT BoundCRS to use a PROJ string transformation (#2521)
+
+ o Update to EPSG v10.015 (#2539)
+
+ o Default log level set to PJ_LOG_ERROR (#2542)
+
+ o CMake installs a pkg-config file proj.pc, where supported (#2547)
+
+ Bug fixes
+ ---------
+
+ o Do not restrict longitude to [-90;90] range in spherical transverse Mercator
+   forward projection (#2471)
+
+ o createOperations(): fix Compound to Geog3D/Projected3D CRS with non-metre ellipsoidal height (#2500)
+
+ o Avoid error messages to be emitted log level is set to PJ_LOG_NONE (#2527)
+
+ o Close database connection when autoclose set to True (#2532)
+
+ THANKS TO
+ ---------
+
+
+ Zac Miller
+ Juan Hernando
+ Thomas Knudsen
+ Sveinung Himle
+ Olli Raisa
+ Nomit Rawat
+ Modern Slave
+ J.H. van de Water
+ Guillaume Lostis
+ Martin Steinisch
+ Javier Jimenez Shaw
+ Mateusz Łoskot
+ Martijn Visser
+ Alan D. Snow
+ Mike Taves
+ Nyall Dawson
+ Charles Karney
+ Kristian Evers
+ Even Rouault
+
+
+7.2.1 Release Notes
+-------------------
+
+ Updates
+ -------
+
+ o Add metadata with the version number of the database layout (#2474)
+
+ o Split coordinateoperation.cpp and test_operation.cpp in several parts (#2484)
+
+ o Update to EPSG v10.008 (#2490)
+
+ o Added the NKG 2008 and 2020 transformations in proj.db (#2495)
+
+ Bug fixes
+ ---------
+
+ o Set CURL_ENABLED definition on projinfo build (#2405)
+
+ o createBoundCRSToWGS84IfPossible(): make it return same result with a CRS
+   built from EPSG code or WKT1 (#2412)
+
+ o WKT2 parsing: several fixes related to map projection parameter units (#2428)
+
+ o createOperation(): make it work properly when one of the CRS is a BoundCRS of
+   a DerivedGeographicCRS (+proj=ob_tran +o_proj=lonlat +towgs84=....) (#2441)
+
+ o WKT parsing: fix ingestion of WKT with a Geocentric CRS as the base of the
+   projected CRS (#2443)
+
+ o GeographicCRS::_isEquivalentTo(EQUIVALENT_EXCEPT_AXIS_ORDER_GEOGCRS):
+   make it work when comparing easting,northing,up and northing,easting,up (#2446)
+
+ o createOperation(): add a ballpark vertical transformation when dealing
+   with GEOIDMODEL[] (#2449)
+
+ o Use same arguments to printf format string for both radians and degrees in
+   output by cct (#2453)
+
+ o PRIMEM WKT handling: fixes on import for 'sexagesimal DMS' or from WKT1:GDAL/ESRI
+   when GEOGCS UNIT != Degree; morph to ESRI the PRIMEM name on export (#2455)
+
+ o createObjectsFromName(): in exact match, make looking for 'ETRS89 / UTM zone 32N'
+   return only the exact match (#2462)
+
+ o Inverse tmerc spherical: fix wrong sign of latitude when lat_0 is used (#2469)
+
+ o Add option to allow export of Geographic/Projected 3D CRS in WKT1_GDAL (#2470)
+
+ o Fix building proj.db with SQLite built with -DSQLITE_DQS=0 (#2480)
+
+ o Include JSON Schema files in CMake builds (#2485)
+
+ o createOperations(): fix inconsistent chaining exception when transforming from BoundCRS of projected CRS based on NTF Paris to BoundCRS of geog CRS NTF Paris (#2486)
+
+ THANKS TO
+ ---------
+
+ Zac Miller
+ Nomit Rawat
+ Guillaume Lostis
+ J.H. van de Water
+ Kristian Evers
+ Even Rouault
+
+
 7.2.0 Release Notes
 -------------------
 
@@ -174,7 +501,7 @@
     o Update to EPSG 9.8.12, ESRI 10.8.1 and import scope and remarks for
       conversion (#2238) (#2267)
 
-    o Map the Behrman projection to cae when converting ESRI CRSes (#1986)
+    o Map the Behrmann projection to cae when converting ESRI CRSes (#1986)
 
     o Support conversion of Flat_Polar_Quartic projection method (#1987)
 
@@ -1518,13 +1845,13 @@ o The PROJ.4 project also distributes the datum-grid package,
  o Return correct latitude when using negative northings in
    Transverse Mercator (tmerc). #138.
 
- o Return correct result at origin in inverse Mod. Stererographic
+ o Return correct result at origin in inverse Modified Stereographic
    of Alaska. #161.
 
- o Return correct result at origin in inverse Mod. Stererographic
+ o Return correct result at origin in inverse Modified Stereographic
    of 48 U.S. #162.
 
- o Return correct result at origin in inverse Mod. Stererographic
+ o Return correct result at origin in inverse Modified Stereographic
    of 50 U.S. #163.
 
  o Return correct result at origin in inverse Lee Oblated

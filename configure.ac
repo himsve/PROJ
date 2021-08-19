@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([PROJ], [8.0.0],
+AC_INIT([PROJ], [8.2.0],
         [https://github.com/OSGeo/PROJ/issues], proj, [https://proj.org])
 AC_CONFIG_MACRO_DIR([m4])
 AC_LANG(C)
@@ -321,6 +321,19 @@ AC_SUBST(CURL_LIBS,$CURL_LIBS)
 AC_SUBST(CURL_ENABLED_FLAGS,$CURL_ENABLED_FLAGS)
 AM_CONDITIONAL(HAVE_CURL, [test "x$FOUND_CURL" = "xyes"])
 
+
+dnl ---------------------------------------------------------------------------
+dnl proj-lib-env-var-tried-last
+dnl ---------------------------------------------------------------------------
+
+AC_ARG_ENABLE(proj-lib-env-var-tried-last,
+              AS_HELP_STRING([--enable-proj-lib-env-var-tried-last],
+                    [Whether the PROJ_LIB environment variable should be tried after the hardcoded location [default=no]]))
+
+if test "x$enable_proj_lib_env_var_tried_last" = "xyes"; then
+    AC_SUBST(PROJ_LIB_ENV_VAR_TRIED_LAST_FLAGS,-DPROJ_LIB_ENV_VAR_TRIED_LAST)
+fi
+
 dnl ---------------------------------------------------------------------------
 dnl Check for external Google Test
 dnl ---------------------------------------------------------------------------
@@ -345,8 +358,10 @@ dnl ---------------------------------------------------------------------------
 dnl Generate files
 dnl ---------------------------------------------------------------------------
 
-AC_CONFIG_FILES([Makefile cmake/Makefile src/Makefile include/Makefile include/proj/Makefile include/proj/internal/Makefile
-                 include/proj/internal/nlohmann/Makefile
+AC_CONFIG_FILES([Makefile cmake/Makefile src/Makefile include/Makefile include/proj/Makefile
+                 include/proj/internal/Makefile
+                 include/proj/internal/vendor/Makefile
+                 include/proj/internal/vendor/nlohmann/Makefile
                  test/Makefile test/cli/Makefile test/gie/Makefile test/gigs/Makefile test/unit/Makefile
                  man/Makefile man/man1/Makefile data/Makefile])
 if ! test "x$with_external_gtest" = "xyes" ; then

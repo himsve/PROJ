@@ -31,7 +31,7 @@ INSERT INTO "usage" VALUES('EPSG','10276','concatenated_operation','EPSG','7811'
 INSERT INTO "concatenated_operation" VALUES('EPSG','7965','Poolbeg height (ft(Br36)) to Malin Head height (1)','','EPSG','5754','EPSG','5731',0.1,'1',0);
 INSERT INTO "usage" VALUES('EPSG','10349','concatenated_operation','EPSG','7965','EPSG','1305','EPSG','1059');
 INSERT INTO "concatenated_operation" VALUES('EPSG','7967','Poolbeg height (ft(Br36)) to Belfast height (1)','','EPSG','5754','EPSG','5732',0.1,'1',0);
-INSERT INTO "usage" VALUES('EPSG','10351','concatenated_operation','EPSG','7967','EPSG','1305','EPSG','1059');
+INSERT INTO "usage" VALUES('EPSG','10351','concatenated_operation','EPSG','7967','EPSG','2530','EPSG','1059');
 INSERT INTO "concatenated_operation" VALUES('EPSG','7973','NGVD29 height (ftUS) to NAVD88 height (1)','','EPSG','5702','EPSG','5703',0.02,'IOGP - US Conus W',0);
 INSERT INTO "usage" VALUES('EPSG','10356','concatenated_operation','EPSG','7973','EPSG','2950','EPSG','1099');
 INSERT INTO "concatenated_operation" VALUES('EPSG','7974','NGVD29 height (ftUS) to NAVD88 height (2)','','EPSG','5702','EPSG','5703',0.02,'IOGP - US Conus C',0);
@@ -425,3 +425,15 @@ INSERT INTO "concatenated_operation" VALUES('EPSG','9336','NAD27 to NAD83(CSRS)v
 INSERT INTO "usage" VALUES('EPSG','14011','concatenated_operation','EPSG','9336','EPSG','2376','EPSG','1151');
 INSERT INTO "concatenated_operation" VALUES('EPSG','9337','NTF (Paris) to RGF93 (1)','See transformation code 7811 for an alternative which uses the NTv2 method as an emulation of the geocentric interpolation in the second step.','EPSG','4807','EPSG','4171',1.0,'IOGP-Fra',0);
 INSERT INTO "usage" VALUES('EPSG','14012','concatenated_operation','EPSG','9337','EPSG','3694','EPSG','1041');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9499','ETRS89 to GHA height (2)','This concatenated operation gives the same result as the HoehenGrid-plus offset from ETRS89 to GHA height. HoehenGrid-plus is implemented in BEV-Transformator using MGI (CRS 4312) as the interpolation CRS for the grid','EPSG','4937','EPSG','5778',0.07,'BEV-Aut',0);
+INSERT INTO "usage" VALUES('EPSG','14958','concatenated_operation','EPSG','9499','EPSG','1037','EPSG','1133');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9683','ITRF2014 to GDA94 (2)','See ITRF2014 to GDA94 (1) (CT 9682) for conformal-only alternative (i.e. without distortion modelling).','EPSG','9000','EPSG','4283',0.06,'ICSM-Aus Conf+Dist',0);
+INSERT INTO "usage" VALUES('EPSG','14962','concatenated_operation','EPSG','9683','EPSG','2575','EPSG','1234');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9685','ATRF2014 to GDA94 (2)','See ATRF2014 to GDA94 (1) (CT 9684) for conformal-only alternative (i.e. without distortion modelling).','EPSG','9309','EPSG','4283',0.06,'ICSM-Aus Conf+Dist',0);
+INSERT INTO "usage" VALUES('EPSG','14963','concatenated_operation','EPSG','9685','EPSG','2575','EPSG','1234');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9687','GDA94 to WGS 84 (G1762) (2)','See GDA94 to WGS 84 (G1762) (1) (CT code 9686) for conformal-only alternative (i.e. without distortion modelling).','EPSG','4283','EPSG','9057',0.25,'ICSM-Aus Conf+Dist',0);
+INSERT INTO "usage" VALUES('EPSG','14964','concatenated_operation','EPSG','9687','EPSG','2575','EPSG','1234');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9731','ETRS89 to ETRS89 + Catania 1965 height (1)','','EPSG','4937','EPSG','9724',0.035,'IGM-Ita 2005 Sicily',1);
+INSERT INTO "usage" VALUES('EPSG','15285','concatenated_operation','EPSG','9731','EPSG','2340','EPSG','1270');
+INSERT INTO "concatenated_operation" VALUES('EPSG','9750','ETRS89 to Catania 1965 height (1)','','EPSG','4937','EPSG','9721',0.035,'IGM-Ita 2005 Sicily',0);
+INSERT INTO "usage" VALUES('EPSG','15385','concatenated_operation','EPSG','9750','EPSG','2340','EPSG','1133');

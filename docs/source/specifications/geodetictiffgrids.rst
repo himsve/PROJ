@@ -73,7 +73,7 @@ is an easy way to inspect such grid files:
   .. note::
 
     Regarding anti-meridian handling, a variety of possibilities exist.
-    We do not attempt to standardize this and filesh hosted on the CDN will use
+    We do not attempt to standardize this and files hosted on the CDN will use
     a georeferencing close to the original data producer.
     For example, NOAA vertical grids that apply to Conterminous USA might even have a top-left
     longitude beyond 180 (for consistency with Alaska grids, whose origin is < 180)
@@ -151,12 +151,12 @@ is an easy way to inspect such grid files:
 - The `ImageDescription <https://www.awaresystems.be/imaging/tiff/tifftags/imagedescription.html>`_
   tag may be used to convey extra information about the name, provenance, version
   and last updated date of the grid.
-  Will be set when possible fo files hosted on the CDN.
+  Will be set when possible for files hosted on the CDN.
   Ignored by PROJ.
 
 - The `Copyright <https://www.awaresystems.be/imaging/tiff/tifftags/copyright.html>`_
   tag may be used to convey extra information about the copyright and license of the grid.
-  Will be set when possible fo files hosted on the CDN.
+  Will be set when possible for files hosted on the CDN.
   Ignored by PROJ.
 
 - The `DateTime <https://www.awaresystems.be/imaging/tiff/tifftags/datetime.html>`_
@@ -164,7 +164,7 @@ is an easy way to inspect such grid files:
   converted. In case of a file conversion, for example from NTv2, this will be
   the date at which the conversion has been performed. The ``ImageDescription``
   tag however will contain the latest of the CREATED or UPDATED fields from the NTv2 file.
-  Will be set when possible fo files hosted on the CDN.
+  Will be set when possible for files hosted on the CDN.
   Ignored by PROJ.
 
 - Files hosted on the CDN will use the `GDAL_NODATA
@@ -406,7 +406,7 @@ is an easy way to inspect such grid files:
     Will be ignored by PROJ (this information can be inferred by the grids extent)
 
   * The ``parent_grid_name`` metadata item should be present if this is a
-    subgrid and its value should be equal to the paren's ``grid_name``
+    subgrid and its value should be equal to the parent's ``grid_name``
     Will be ignored by PROJ (this information can be inferred by the grids extent)
 
   * The ``number_of_nested_grids`` metadata item should be present if there are
@@ -569,7 +569,7 @@ tag set to 0.
 
 If a low-resolution grid is available, it should be put before subgrids of
 higher-resolution in the chain of IFD linking. On reading, PROJ will use the
-value from the highest-resoluted grid that contains the point of interest.
+value from the highest-resolution grid that contains the point of interest.
 
 For efficient reading from the network, files hosted on the CDN will use
 a layout similar to the one described in the `low level paragraph of the Cloud Optimized GeoTIFF

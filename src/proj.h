@@ -171,8 +171,20 @@ extern "C" {
 
 /* The version numbers should be updated with every release! **/
 #define PROJ_VERSION_MAJOR 8
-#define PROJ_VERSION_MINOR 0
+#define PROJ_VERSION_MINOR 2
 #define PROJ_VERSION_PATCH 0
+
+/* Note: the following 3 defines have been introduced in PROJ 8.0.1 */
+/* Macro to compute a PROJ version number from its components */
+#define PROJ_COMPUTE_VERSION(maj,min,patch) ((maj)*10000+(min)*100+(patch))
+
+/* Current PROJ version from the above version numbers */
+#define PROJ_VERSION_NUMBER                 \
+    PROJ_COMPUTE_VERSION(PROJ_VERSION_MAJOR, PROJ_VERSION_MINOR, PROJ_VERSION_PATCH)
+
+/* Macro that returns true if the current PROJ version is at least the version specified by (maj,min,patch) */
+#define PROJ_AT_LEAST_VERSION(maj,min,patch) \
+    (PROJ_VERSION_NUMBER >= PROJ_COMPUTE_VERSION(maj,min,patch))
 
 extern char const PROJ_DLL pj_release[]; /* global release id string */
 
@@ -547,7 +559,7 @@ PJ PROJ_DLL *proj_create_crs_to_crs_from_pj(PJ_CONTEXT *ctx,
                                             const PJ *target_crs,
                                             PJ_AREA *area,
                                             const char* const *options);
-/*! @endcond Doxygen_Suppress */
+/*! @endcond */
 PJ PROJ_DLL *proj_normalize_for_visualization(PJ_CONTEXT *ctx, const PJ* obj);
 /*! @cond Doxygen_Suppress */
 void PROJ_DLL proj_assign_context(PJ* pj, PJ_CONTEXT* ctx);
@@ -612,10 +624,10 @@ PJ_COORD PROJ_DLL proj_geod (const PJ *P, PJ_COORD a, PJ_COORD b);
 
 /* PROJ error codes */
 
-/** Error codes typically related to coordinate operation initalization
+/** Error codes typically related to coordinate operation initialization
  * Note: some of them can also be emitted during coordinate transformation,
  * like PROJ_ERR_INVALID_OP_FILE_NOT_FOUND_OR_INVALID in case the resource loading
- * is differed until it is really needed.
+ * is deferred until it is really needed.
  */
 #define PROJ_ERR_INVALID_OP                           1024                        /* other/unspecified error related to coordinate operation initialization */
 #define PROJ_ERR_INVALID_OP_WRONG_SYNTAX              (PROJ_ERR_INVALID_OP+1)     /* invalid pipeline structure, missing +proj argument, etc */
@@ -936,6 +948,11 @@ typedef struct
     /** Name of the projection method for a projected CRS. Might be NULL even
      *for projected CRS in some cases. */
     char* projection_method_name;
+
+    /** Name of the celestial body of the CRS (e.g. "Earth").
+     * @since 8.1
+     */
+    char* celestial_body_name;
 } PROJ_CRS_INFO;
 
 /** \brief Structure describing optional parameters for proj_get_crs_list();
@@ -970,6 +987,12 @@ typedef struct
 
     /** Whether deprecated objects are allowed. Default to FALSE. */
     int allow_deprecated;
+
+    /** Celestial body of the CRS (e.g. "Earth"). The default value, NULL,
+     *  means no restriction
+     * @since 8.1
+     */
+    const char* celestial_body_name;
 } PROJ_CRS_LIST_PARAMETERS;
 
 /** \brief Structure given description of a unit.
@@ -1005,6 +1028,22 @@ typedef struct
     int deprecated;
 } PROJ_UNIT_INFO;
 
+/** \brief Structure given description of a celestial body.
+ *
+ * This structure may grow over time, and should not be directly allocated by
+ * client code.
+ * @since 8.1
+ */
+typedef struct
+{
+    /** Authority name. */
+    char* auth_name;
+
+    /** Object name. For example "Earth" */
+    char* name;
+
+} PROJ_CELESTIAL_BODY_INFO;
+
 
 /**@}*/
 
@@ -1016,7 +1055,7 @@ typedef struct
  * proj_create_from_database() and other functions in that section
  * will have generally minimal interaction with the functions declared in the
  * upper section of this header file (calling those functions on those objects
- * will either return an error or default/non-sensical values). The exception is
+ * will either return an error or default/nonsensical values). The exception is
  * for ISO19111 objects of type CoordinateOperation that can be exported as a
  * valid PROJ pipeline. In this case, the PJ objects will work for example with
  * proj_trans_generic().
@@ -1044,6 +1083,9 @@ const char PROJ_DLL *proj_context_get_database_path(PJ_CONTEXT *ctx);
 const char PROJ_DLL *proj_context_get_database_metadata(PJ_CONTEXT* ctx,
                                                         const char* key);
 
+PROJ_STRING_LIST PROJ_DLL proj_context_get_database_structure(
+                                                PJ_CONTEXT* ctx,
+                                                const char* const *options);
 
 PJ_GUESSED_WKT_DIALECT PROJ_DLL proj_context_guess_wkt_dialect(PJ_CONTEXT *ctx,
                                                                const char *wkt);
@@ -1146,6 +1188,12 @@ PJ_OBJ_LIST PROJ_DLL *proj_identify(PJ_CONTEXT *ctx,
                                         const char* const *options,
                                         int **out_confidence);
 
+PROJ_STRING_LIST PROJ_DLL proj_get_geoid_models_from_database(
+                               PJ_CONTEXT *ctx,
+                               const char *auth_name,
+                               const char *code,
+                               const char *const *options);
+
 void PROJ_DLL proj_int_list_destroy(int* list);
 
 /* ------------------------------------------------------------------------- */
@@ -1156,6 +1204,13 @@ PROJ_STRING_LIST PROJ_DLL proj_get_codes_from_database(PJ_CONTEXT *ctx,
                                              const char *auth_name,
                                              PJ_TYPE type,
                                              int allow_deprecated);
+
+PROJ_CELESTIAL_BODY_INFO PROJ_DLL **proj_get_celestial_body_list_from_database(
+                                              PJ_CONTEXT *ctx,
+                                              const char *auth_name,
+                                              int *out_result_count);
+
+void PROJ_DLL proj_celestial_body_list_destroy(PROJ_CELESTIAL_BODY_INFO** list);
 
 PROJ_CRS_LIST_PARAMETERS PROJ_DLL *proj_get_crs_list_parameters_create(void);
 
@@ -1180,8 +1235,33 @@ PROJ_UNIT_INFO PROJ_DLL **proj_get_units_from_database(
 void PROJ_DLL proj_unit_list_destroy(PROJ_UNIT_INFO** list);
 
 /* ------------------------------------------------------------------------- */
+/*! @cond Doxygen_Suppress */
+typedef struct PJ_INSERT_SESSION PJ_INSERT_SESSION;
+/*! @endcond */
 
+PJ_INSERT_SESSION PROJ_DLL *proj_insert_object_session_create(PJ_CONTEXT *ctx);
 
+void PROJ_DLL proj_insert_object_session_destroy(PJ_CONTEXT *ctx,
+                                                 PJ_INSERT_SESSION *session);
+
+PROJ_STRING_LIST PROJ_DLL proj_get_insert_statements(PJ_CONTEXT *ctx,
+                                            PJ_INSERT_SESSION *session,
+                                            const PJ *object,
+                                            const char *authority,
+                                            const char *code,
+                                            int numeric_codes,
+                                            const char *const *allowed_authorities,
+                                            const char *const *options);
+
+char PROJ_DLL *proj_suggests_code_for(PJ_CONTEXT *ctx,
+                                      const PJ *object,
+                                      const char *authority,
+                                      int numeric_code,
+                                      const char *const *options);
+
+void PROJ_DLL proj_string_destroy(char* str);
+
+/* ------------------------------------------------------------------------- */
 /*! @cond Doxygen_Suppress */
 typedef struct PJ_OPERATION_FACTORY_CONTEXT PJ_OPERATION_FACTORY_CONTEXT;
 /*! @endcond */
@@ -1271,6 +1351,8 @@ int PROJ_DLL proj_get_suggested_operation(PJ_CONTEXT *ctx,
 
 /* ------------------------------------------------------------------------- */
 
+int PROJ_DLL proj_crs_is_derived(PJ_CONTEXT *ctx, const PJ *crs);
+
 PJ PROJ_DLL *proj_crs_get_geodetic_crs(PJ_CONTEXT *ctx, const PJ *crs);
 
 PJ PROJ_DLL *proj_crs_get_horizontal_datum(PJ_CONTEXT *ctx, const PJ *crs);
@@ -1323,6 +1405,8 @@ int PROJ_DLL proj_ellipsoid_get_parameters(PJ_CONTEXT *ctx,
                                             double *out_semi_minor_metre,
                                             int    *out_is_semi_minor_computed,
                                             double *out_inv_flattening);
+
+const char PROJ_DLL *proj_get_celestial_body_name(PJ_CONTEXT *ctx, const PJ *obj);
 
 PJ PROJ_DLL *proj_get_prime_meridian(PJ_CONTEXT *ctx,
                                              const PJ *obj);

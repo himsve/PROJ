@@ -43,6 +43,14 @@ extensions = [
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
+# BibTeX configuration
+bibtex_bibfiles = ['references.bib']
+
+# Spelling configuration
+spelling_lang = tokenizer_lang = 'en_GB'
+spelling_show_suggestions = False
+spelling_ignore_importable_modules = False
+
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 # source_suffix = ['.rst', '.md']
@@ -69,8 +77,8 @@ copyright = u'1983-{0}'.format(now.year)
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-version = '8.0.0'
-data_version = '1.3'
+version = '8.2.0'
+data_version = '1.7'
 
 # use same |release| as |version|
 release = version
@@ -194,7 +202,7 @@ html_context = {
     'github_user': 'OSGeo',
     'github_repo': 'PROJ',
     # TODO: edit when switching active branch
-    'github_version': '/7.2/docs/source/',
+    'github_version': '/8.0/docs/source/',
     'css_files': [
         '_static/theme_overrides.css',  # override wide tables in RTD theme
     ],
@@ -402,6 +410,9 @@ texinfo_documents = [
 
 breathe_projects = {
     "doxygen_api":"../build/xml/",
+}
+breathe_domain_by_extension = {
+    "h" : "c",
 }
 
 import redirects

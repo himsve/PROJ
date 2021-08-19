@@ -916,9 +916,9 @@ struct WKTNode::Private {
 
 // ---------------------------------------------------------------------------
 
-const WKTNodeNNPtr &WKTNode::Private::lookForChild(const std::string &childName,
-                                                   int occurrence) const
-    noexcept {
+const WKTNodeNNPtr &
+WKTNode::Private::lookForChild(const std::string &childName,
+                               int occurrence) const noexcept {
     int occCount = 0;
     for (const auto &child : children_) {
         if (ci_equal(child->GP()->value(), childName)) {
@@ -1504,15 +1504,15 @@ double WKTParser::Private::asDouble(const WKTNodeNNPtr &node) {
 IdentifierPtr WKTParser::Private::buildId(const WKTNodeNNPtr &node,
                                           bool tolerant, bool removeInverseOf) {
     const auto *nodeP = node->GP();
-    const auto &nodeChidren = nodeP->children();
-    if (nodeChidren.size() >= 2) {
-        auto codeSpace = stripQuotes(nodeChidren[0]);
+    const auto &nodeChildren = nodeP->children();
+    if (nodeChildren.size() >= 2) {
+        auto codeSpace = stripQuotes(nodeChildren[0]);
         if (removeInverseOf && starts_with(codeSpace, "INVERSE(") &&
             codeSpace.back() == ')') {
             codeSpace = codeSpace.substr(strlen("INVERSE("));
             codeSpace.resize(codeSpace.size() - 1);
         }
-        auto code = stripQuotes(nodeChidren[1]);
+        auto code = stripQuotes(nodeChildren[1]);
         auto &citationNode = nodeP->lookForChild(WKTConstants::CITATION);
         auto &uriNode = nodeP->lookForChild(WKTConstants::URI);
         PropertyMap propertiesId;
@@ -1536,9 +1536,9 @@ IdentifierPtr WKTParser::Private::buildId(const WKTNodeNNPtr &node,
                                  stripQuotes(uriNodeP->children()[0]));
             }
         }
-        if (nodeChidren.size() >= 3 &&
-            nodeChidren[2]->GP()->childrenSize() == 0) {
-            auto version = stripQuotes(nodeChidren[2]);
+        if (nodeChildren.size() >= 3 &&
+            nodeChildren[2]->GP()->childrenSize() == 0) {
+            auto version = stripQuotes(nodeChildren[2]);
             propertiesId.set(Identifier::VERSION_KEY, version);
         }
         return Identifier::create(code, propertiesId);
@@ -3408,8 +3408,8 @@ ConversionNNPtr WKTParser::Private::buildProjectionFromESRI(
     }
 
     struct ci_less_struct {
-        bool operator()(const std::string &lhs, const std::string &rhs) const
-            noexcept {
+        bool operator()(const std::string &lhs,
+                        const std::string &rhs) const noexcept {
             return ci_less(lhs, rhs);
         }
     };
@@ -3750,14 +3750,12 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
     // Krovak East-North Oriented methods
     if (ci_equal(projectionName, "Krovak") &&
         projCRSNode->countChildrenOfName(WKTConstants::AXIS) == 2 &&
-        &buildAxis(
-             projCRSNode->GP()->lookForChild(WKTConstants::AXIS, 0),
-             defaultLinearUnit, UnitOfMeasure::Type::LINEAR, false,
-             1)->direction() == &AxisDirection::SOUTH &&
-        &buildAxis(
-             projCRSNode->GP()->lookForChild(WKTConstants::AXIS, 1),
-             defaultLinearUnit, UnitOfMeasure::Type::LINEAR, false,
-             2)->direction() == &AxisDirection::WEST) {
+        &buildAxis(projCRSNode->GP()->lookForChild(WKTConstants::AXIS, 0),
+                   defaultLinearUnit, UnitOfMeasure::Type::LINEAR, false, 1)
+                ->direction() == &AxisDirection::SOUTH &&
+        &buildAxis(projCRSNode->GP()->lookForChild(WKTConstants::AXIS, 1),
+                   defaultLinearUnit, UnitOfMeasure::Type::LINEAR, false, 2)
+                ->direction() == &AxisDirection::WEST) {
         mapping = getMapping(EPSG_CODE_METHOD_KROVAK);
     }
 
@@ -3946,7 +3944,7 @@ WKTParser::Private::buildProjectedCRS(const WKTNodeNNPtr &node) {
         // It is likely that the ESRI definition of EPSG:32661 (UPS North) &
         // EPSG:32761 (UPS South) uses the easting-northing order, instead
         // of the EPSG northing-easting order
-        // so don't substitue names to avoid confusion.
+        // so don't substitute names to avoid confusion.
         if (projCRSName == "UPS_North") {
             props.set(IdentifiedObject::NAME_KEY, "WGS 84 / UPS North (E,N)");
         } else if (projCRSName == "UPS_South") {
@@ -6128,10 +6126,198 @@ EllipsoidNNPtr JSONParser::buildEllipsoid(const json &j) {
 
 // ---------------------------------------------------------------------------
 
+// import a CRS encoded as OGC Best Practice document 11-135.
+
+static const char *const crsURLPrefixes[] = {
+    "http://opengis.net/def/crs",     "https://opengis.net/def/crs",
+    "http://www.opengis.net/def/crs", "https://www.opengis.net/def/crs",
+    "www.opengis.net/def/crs",
+};
+
+static bool isCRSURL(const std::string &text) {
+    for (const auto crsURLPrefix : crsURLPrefixes) {
+        if (starts_with(text, crsURLPrefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static CRSNNPtr importFromCRSURL(const std::string &text,
+                                 const DatabaseContextNNPtr &dbContext) {
+    // e.g http://www.opengis.net/def/crs/EPSG/0/4326
+    std::vector<std::string> parts;
+    for (const auto crsURLPrefix : crsURLPrefixes) {
+        if (starts_with(text, crsURLPrefix)) {
+            parts = split(text.substr(strlen(crsURLPrefix)), '/');
+            break;
+        }
+    }
+
+    // e.g
+    // "http://www.opengis.net/def/crs-compound?1=http://www.opengis.net/def/crs/EPSG/0/4326&2=http://www.opengis.net/def/crs/EPSG/0/3855"
+    if (!parts.empty() && starts_with(parts[0], "-compound?")) {
+        parts = split(text.substr(text.find('?') + 1), '&');
+        std::map<int, std::string> mapParts;
+        for (const auto &part : parts) {
+            const auto queryParam = split(part, '=');
+            if (queryParam.size() != 2) {
+                throw ParsingException("invalid OGC CRS URL");
+            }
+            try {
+                mapParts[std::stoi(queryParam[0])] = queryParam[1];
+            } catch (const std::exception &) {
+                throw ParsingException("invalid OGC CRS URL");
+            }
+        }
+        std::vector<CRSNNPtr> components;
+        std::string name;
+        for (size_t i = 1; i <= mapParts.size(); ++i) {
+            const auto iter = mapParts.find(static_cast<int>(i));
+            if (iter == mapParts.end()) {
+                throw ParsingException("invalid OGC CRS URL");
+            }
+            components.emplace_back(importFromCRSURL(iter->second, dbContext));
+            if (!name.empty()) {
+                name += " + ";
+            }
+            name += components.back()->nameStr();
+        }
+        return CompoundCRS::create(
+            util::PropertyMap().set(IdentifiedObject::NAME_KEY, name),
+            components);
+    }
+
+    if (parts.size() < 4) {
+        throw ParsingException("invalid OGC CRS URL");
+    }
+
+    const auto &auth_name = parts[1];
+    const auto &code = parts[3];
+    auto factoryCRS = AuthorityFactory::create(dbContext, auth_name);
+    return factoryCRS->createCoordinateReferenceSystem(code, true);
+}
+
+// ---------------------------------------------------------------------------
+
+/* Import a CRS encoded as WMSAUTO string.
+ *
+ * Note that the WMS 1.3 specification does not include the
+ * units code, while apparently earlier specs do.  We try to
+ * guess around this.
+ *
+ * (code derived from GDAL's importFromWMSAUTO())
+ */
+
+static CRSNNPtr importFromWMSAUTO(const std::string &text) {
+
+    int nUnitsId = 9001;
+    double dfRefLong;
+    double dfRefLat = 0.0;
+
+    assert(ci_starts_with(text, "AUTO:"));
+    const auto parts = split(text.substr(strlen("AUTO:")), ',');
+
+    try {
+        constexpr int AUTO_MOLLWEIDE = 42005;
+        if (parts.size() == 4) {
+            nUnitsId = std::stoi(parts[1]);
+            dfRefLong = c_locale_stod(parts[2]);
+            dfRefLat = c_locale_stod(parts[3]);
+        } else if (parts.size() == 3 && std::stoi(parts[0]) == AUTO_MOLLWEIDE) {
+            nUnitsId = std::stoi(parts[1]);
+            dfRefLong = c_locale_stod(parts[2]);
+        } else if (parts.size() == 3) {
+            dfRefLong = c_locale_stod(parts[1]);
+            dfRefLat = c_locale_stod(parts[2]);
+        } else if (parts.size() == 2 && std::stoi(parts[0]) == AUTO_MOLLWEIDE) {
+            dfRefLong = c_locale_stod(parts[1]);
+        } else {
+            throw ParsingException("invalid WMS AUTO CRS definition");
+        }
+
+        const auto getConversion = [=]() {
+            const int nProjId = std::stoi(parts[0]);
+            switch (nProjId) {
+            case 42001: // Auto UTM
+                if (!(dfRefLong >= -180 && dfRefLong < 180)) {
+                    throw ParsingException("invalid WMS AUTO CRS definition: "
+                                           "invalid longitude");
+                }
+                return Conversion::createUTM(
+                    util::PropertyMap(),
+                    static_cast<int>(floor((dfRefLong + 180.0) / 6.0)) + 1,
+                    dfRefLat >= 0.0);
+
+            case 42002: // Auto TM (strangely very UTM-like).
+                return Conversion::createTransverseMercator(
+                    util::PropertyMap(), common::Angle(0),
+                    common::Angle(dfRefLong), common::Scale(0.9996),
+                    common::Length(500000),
+                    common::Length((dfRefLat >= 0.0) ? 0.0 : 10000000.0));
+
+            case 42003: // Auto Orthographic.
+                return Conversion::createOrthographic(
+                    util::PropertyMap(), common::Angle(dfRefLat),
+                    common::Angle(dfRefLong), common::Length(0),
+                    common::Length(0));
+
+            case 42004: // Auto Equirectangular
+                return Conversion::createEquidistantCylindrical(
+                    util::PropertyMap(), common::Angle(dfRefLat),
+                    common::Angle(dfRefLong), common::Length(0),
+                    common::Length(0));
+
+            case 42005: // MSVC 2015 thinks that AUTO_MOLLWEIDE is not constant
+                return Conversion::createMollweide(
+                    util::PropertyMap(), common::Angle(dfRefLong),
+                    common::Length(0), common::Length(0));
+
+            default:
+                throw ParsingException("invalid WMS AUTO CRS definition: "
+                                       "unsupported projection id");
+            }
+        };
+
+        const auto getUnits = [=]() {
+            switch (nUnitsId) {
+            case 9001:
+                return UnitOfMeasure::METRE;
+
+            case 9002:
+                return UnitOfMeasure::FOOT;
+
+            case 9003:
+                return UnitOfMeasure::US_FOOT;
+
+            default:
+                throw ParsingException("invalid WMS AUTO CRS definition: "
+                                       "unsupported units code");
+            }
+        };
+
+        return crs::ProjectedCRS::create(
+            util::PropertyMap().set(IdentifiedObject::NAME_KEY, "unnamed"),
+            crs::GeographicCRS::EPSG_4326, getConversion(),
+            cs::CartesianCS::createEastingNorthing(getUnits()));
+
+    } catch (const std::exception &) {
+        throw ParsingException("invalid WMS AUTO CRS definition");
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 static BaseObjectNNPtr createFromUserInput(const std::string &text,
                                            const DatabaseContextPtr &dbContext,
                                            bool usePROJ4InitRules,
                                            PJ_CONTEXT *ctx) {
+    std::size_t idxFirstCharNotSpace = text.find_first_not_of(" \t\r\n");
+    if (idxFirstCharNotSpace > 0 && idxFirstCharNotSpace != std::string::npos) {
+        return createFromUserInput(text.substr(idxFirstCharNotSpace), dbContext,
+                                   usePROJ4InitRules, ctx);
+    }
+
     if (!text.empty() && text[0] == '{') {
         json j;
         try {
@@ -6183,6 +6369,14 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
             .createFromPROJString(text);
     }
 
+    if (isCRSURL(text) && dbContext) {
+        return importFromCRSURL(text, NN_NO_CHECK(dbContext));
+    }
+
+    if (ci_starts_with(text, "AUTO:")) {
+        return importFromWMSAUTO(text);
+    }
+
     auto tokens = split(text, ':');
     if (tokens.size() == 2) {
         if (!dbContext) {
@@ -6230,6 +6424,30 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
             }
             throw;
         }
+    } else if (tokens.size() == 3) {
+        // ESRI:103668+EPSG:5703 ... compound
+        auto tokensCenter = split(tokens[1], '+');
+        if (tokensCenter.size() == 2) {
+            if (!dbContext) {
+                throw ParsingException("no database context specified");
+            }
+            DatabaseContextNNPtr dbContextNNPtr(NN_NO_CHECK(dbContext));
+
+            const auto &authName1 = tokens[0];
+            const auto &code1 = tokensCenter[0];
+            const auto &authName2 = tokensCenter[1];
+            const auto &code2 = tokens[2];
+
+            auto factory1 = AuthorityFactory::create(dbContextNNPtr, authName1);
+            auto crs1 = factory1->createCoordinateReferenceSystem(code1, false);
+            auto factory2 = AuthorityFactory::create(dbContextNNPtr, authName2);
+            auto crs2 = factory2->createCoordinateReferenceSystem(code2, false);
+            return CompoundCRS::createLax(
+                util::PropertyMap().set(IdentifiedObject::NAME_KEY,
+                                        crs1->nameStr() + " + " +
+                                            crs2->nameStr()),
+                {crs1, crs2}, dbContext);
+        }
     }
 
     if (starts_with(text, "urn:ogc:def:crs,")) {
@@ -6273,73 +6491,109 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
                 AuthorityFactory::create(NN_NO_CHECK(dbContext), tokensOp[1]);
             auto op = factoryOp->createCoordinateOperation(tokensOp[3], true);
 
-            if (dynamic_cast<GeographicCRS *>(baseCRS.get()) &&
-                dynamic_cast<Conversion *>(op.get()) &&
-                dynamic_cast<CartesianCS *>(cs.get())) {
-                auto geogCRS = NN_NO_CHECK(
-                    util::nn_dynamic_pointer_cast<GeographicCRS>(baseCRS));
-                auto name = op->nameStr() + " / " + baseCRS->nameStr();
-                if (geogCRS->coordinateSystem()->axisList().size() == 3 &&
-                    baseCRS->nameStr().find("3D") == std::string::npos) {
-                    name += " (3D)";
-                }
-                return ProjectedCRS::create(
-                    util::PropertyMap().set(IdentifiedObject::NAME_KEY, name),
-                    geogCRS,
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<Conversion>(op)),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<CartesianCS>(cs)));
-            } else if (dynamic_cast<GeodeticCRS *>(baseCRS.get()) &&
-                       !dynamic_cast<GeographicCRS *>(baseCRS.get()) &&
-                       dynamic_cast<Conversion *>(op.get()) &&
-                       dynamic_cast<CartesianCS *>(cs.get())) {
-                return DerivedGeodeticCRS::create(
-                    util::PropertyMap().set(IdentifiedObject::NAME_KEY,
-                                            op->nameStr() + " / " +
-                                                baseCRS->nameStr()),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<GeodeticCRS>(baseCRS)),
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<Conversion>(op)),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<CartesianCS>(cs)));
-            } else if (dynamic_cast<GeographicCRS *>(baseCRS.get()) &&
-                       dynamic_cast<Conversion *>(op.get()) &&
-                       dynamic_cast<EllipsoidalCS *>(cs.get())) {
-                return DerivedGeographicCRS::create(
-                    util::PropertyMap().set(IdentifiedObject::NAME_KEY,
-                                            op->nameStr() + " / " +
-                                                baseCRS->nameStr()),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<GeodeticCRS>(baseCRS)),
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<Conversion>(op)),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<EllipsoidalCS>(cs)));
-            } else if (dynamic_cast<ProjectedCRS *>(baseCRS.get()) &&
-                       dynamic_cast<Conversion *>(op.get())) {
-                return DerivedProjectedCRS::create(
-                    util::PropertyMap().set(IdentifiedObject::NAME_KEY,
-                                            op->nameStr() + " / " +
-                                                baseCRS->nameStr()),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<ProjectedCRS>(baseCRS)),
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<Conversion>(op)),
-                    cs);
-            } else if (dynamic_cast<VerticalCRS *>(baseCRS.get()) &&
-                       dynamic_cast<Conversion *>(op.get()) &&
-                       dynamic_cast<VerticalCS *>(cs.get())) {
-                return DerivedVerticalCRS::create(
-                    util::PropertyMap().set(IdentifiedObject::NAME_KEY,
-                                            op->nameStr() + " / " +
-                                                baseCRS->nameStr()),
-                    NN_NO_CHECK(
-                        util::nn_dynamic_pointer_cast<VerticalCRS>(baseCRS)),
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<Conversion>(op)),
-                    NN_NO_CHECK(util::nn_dynamic_pointer_cast<VerticalCS>(cs)));
-            } else {
-                throw ParsingException("unsupported combination of baseCRS, CS "
-                                       "and coordinateOperation for a "
-                                       "DerivedCRS");
+            const auto &baseName = baseCRS->nameStr();
+            std::string name(baseName);
+            auto geogCRS =
+                util::nn_dynamic_pointer_cast<GeographicCRS>(baseCRS);
+            if (geogCRS &&
+                geogCRS->coordinateSystem()->axisList().size() == 3 &&
+                baseName.find("3D") == std::string::npos) {
+                name += " (3D)";
             }
+            name += " / ";
+            name += op->nameStr();
+            auto props =
+                util::PropertyMap().set(IdentifiedObject::NAME_KEY, name);
+
+            if (auto conv = util::nn_dynamic_pointer_cast<Conversion>(op)) {
+                auto convNN = NN_NO_CHECK(conv);
+                if (geogCRS != nullptr) {
+                    auto geogCRSNN = NN_NO_CHECK(geogCRS);
+                    if (CartesianCSPtr ccs =
+                            util::nn_dynamic_pointer_cast<CartesianCS>(cs)) {
+                        return ProjectedCRS::create(props, geogCRSNN, convNN,
+                                                    NN_NO_CHECK(ccs));
+                    }
+                    if (EllipsoidalCSPtr ecs =
+                            util::nn_dynamic_pointer_cast<EllipsoidalCS>(cs)) {
+                        return DerivedGeographicCRS::create(
+                            props, geogCRSNN, convNN, NN_NO_CHECK(ecs));
+                    }
+                } else if (dynamic_cast<GeodeticCRS *>(baseCRS.get()) &&
+                           dynamic_cast<CartesianCS *>(cs.get())) {
+                    return DerivedGeodeticCRS::create(
+                        props,
+                        NN_NO_CHECK(util::nn_dynamic_pointer_cast<GeodeticCRS>(
+                            baseCRS)),
+                        convNN,
+                        NN_NO_CHECK(
+                            util::nn_dynamic_pointer_cast<CartesianCS>(cs)));
+                } else if (auto pcrs =
+                               util::nn_dynamic_pointer_cast<ProjectedCRS>(
+                                   baseCRS)) {
+                    return DerivedProjectedCRS::create(props, NN_NO_CHECK(pcrs),
+                                                       convNN, cs);
+                } else if (auto vertBaseCRS =
+                               util::nn_dynamic_pointer_cast<VerticalCRS>(
+                                   baseCRS)) {
+                    if (auto vertCS =
+                            util::nn_dynamic_pointer_cast<VerticalCS>(cs)) {
+                        const int methodCode = convNN->method()->getEPSGCode();
+                        std::string newName(baseName);
+                        std::string unitNameSuffix;
+                        for (const char *suffix : {" (ft)", " (ftUS)"}) {
+                            if (ends_with(newName, suffix)) {
+                                unitNameSuffix = suffix;
+                                newName.resize(newName.size() - strlen(suffix));
+                                break;
+                            }
+                        }
+                        bool newNameOk = false;
+                        if (methodCode ==
+                                EPSG_CODE_METHOD_CHANGE_VERTICAL_UNIT_NO_CONV_FACTOR ||
+                            methodCode ==
+                                EPSG_CODE_METHOD_CHANGE_VERTICAL_UNIT) {
+                            const auto &unitName =
+                                vertCS->axisList()[0]->unit().name();
+                            if (unitName == UnitOfMeasure::METRE.name()) {
+                                newNameOk = true;
+                            } else if (unitName == UnitOfMeasure::FOOT.name()) {
+                                newName += " (ft)";
+                                newNameOk = true;
+                            } else if (unitName ==
+                                       UnitOfMeasure::US_FOOT.name()) {
+                                newName += " (ftUS)";
+                                newNameOk = true;
+                            }
+                        } else if (methodCode ==
+                                   EPSG_CODE_METHOD_HEIGHT_DEPTH_REVERSAL) {
+                            if (ends_with(newName, " height")) {
+                                newName.resize(newName.size() -
+                                               strlen(" height"));
+                                newName += " depth";
+                                newName += unitNameSuffix;
+                                newNameOk = true;
+                            } else if (ends_with(newName, " depth")) {
+                                newName.resize(newName.size() -
+                                               strlen(" depth"));
+                                newName += " height";
+                                newName += unitNameSuffix;
+                                newNameOk = true;
+                            }
+                        }
+                        if (newNameOk) {
+                            props.set(IdentifiedObject::NAME_KEY, newName);
+                        }
+                        return DerivedVerticalCRS::create(
+                            props, NN_NO_CHECK(vertBaseCRS), convNN,
+                            NN_NO_CHECK(vertCS));
+                    }
+                }
+            }
+
+            throw ParsingException("unsupported combination of baseCRS, CS "
+                                   "and coordinateOperation for a "
+                                   "DerivedCRS");
         }
 
         // OGC 07-092r2: para 7.5.2
@@ -6402,15 +6656,14 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
         return ConcatenatedOperation::createComputeMetadata(components, true);
     }
 
-    // urn:ogc:def:crs:EPSG::4326
-    if (tokens.size() == 7) {
+    const auto createFromURNPart =
+        [&dbContext](const std::string &type, const std::string &authName,
+                     const std::string &code) -> BaseObjectNNPtr {
         if (!dbContext) {
             throw ParsingException("no database context specified");
         }
-        const auto &type = tokens[3];
         auto factory =
-            AuthorityFactory::create(NN_NO_CHECK(dbContext), tokens[4]);
-        const auto &code = tokens[6];
+            AuthorityFactory::create(NN_NO_CHECK(dbContext), authName);
         if (type == "crs") {
             return factory->createCoordinateReferenceSystem(code);
         }
@@ -6430,56 +6683,91 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
             return factory->createPrimeMeridian(code);
         }
         throw ParsingException(concat("unhandled object type: ", type));
+    };
+
+    // urn:ogc:def:crs:EPSG::4326
+    if (tokens.size() == 7 && tolower(tokens[0]) == "urn") {
+
+        const auto type = tokens[3] == "CRS" ? "crs" : tokens[3];
+        const auto &authName = tokens[4];
+        const auto &code = tokens[6];
+        return createFromURNPart(type, authName, code);
+    }
+
+    // urn:ogc:def:crs:OGC::AUTO42001:-117:33
+    if (tokens.size() > 7 && tokens[0] == "urn" && tokens[4] == "OGC" &&
+        ci_starts_with(tokens[6], "AUTO")) {
+        const auto textAUTO = text.substr(text.find(":AUTO") + 5);
+        return importFromWMSAUTO("AUTO:" + replaceAll(textAUTO, ":", ","));
+    }
+
+    // Legacy urn:opengis:crs:EPSG:0:4326 (note the missing def: compared to
+    // above)
+    if (tokens.size() == 6 && tokens[0] == "urn" && tokens[2] != "def") {
+        const auto &type = tokens[2];
+        const auto &authName = tokens[3];
+        const auto &code = tokens[5];
+        return createFromURNPart(type, authName, code);
+    }
+
+    // Legacy urn:x-ogc:def:crs:EPSG:4326 (note the missing version)
+    if (tokens.size() == 6 && tokens[0] == "urn") {
+        const auto &type = tokens[3];
+        const auto &authName = tokens[4];
+        const auto &code = tokens[5];
+        return createFromURNPart(type, authName, code);
     }
 
     if (dbContext) {
         auto factory =
             AuthorityFactory::create(NN_NO_CHECK(dbContext), std::string());
 
-        const auto searchObject = [&factory](
-            const std::string &objectName, bool approximateMatch,
-            const std::vector<AuthorityFactory::ObjectType> &objectTypes,
-            bool &goOn) {
-            constexpr size_t limitResultCount = 10;
-            auto res = factory->createObjectsFromName(
-                objectName, objectTypes, approximateMatch, limitResultCount);
-            if (res.size() == 1) {
-                return res.front();
-            }
-            if (res.size() > 1) {
-                if (objectTypes.size() == 1 &&
-                    objectTypes[0] == AuthorityFactory::ObjectType::CRS) {
-                    for (size_t ndim = 2; ndim <= 3; ndim++) {
-                        for (const auto &obj : res) {
-                            auto crs =
-                                dynamic_cast<crs::GeographicCRS *>(obj.get());
-                            if (crs &&
-                                crs->coordinateSystem()->axisList().size() ==
-                                    ndim) {
-                                return obj;
+        const auto searchObject =
+            [&factory](
+                const std::string &objectName, bool approximateMatch,
+                const std::vector<AuthorityFactory::ObjectType> &objectTypes,
+                bool &goOn) {
+                constexpr size_t limitResultCount = 10;
+                auto res = factory->createObjectsFromName(
+                    objectName, objectTypes, approximateMatch,
+                    limitResultCount);
+                if (res.size() == 1) {
+                    return res.front();
+                }
+                if (res.size() > 1) {
+                    if (objectTypes.size() == 1 &&
+                        objectTypes[0] == AuthorityFactory::ObjectType::CRS) {
+                        for (size_t ndim = 2; ndim <= 3; ndim++) {
+                            for (const auto &obj : res) {
+                                auto crs = dynamic_cast<crs::GeographicCRS *>(
+                                    obj.get());
+                                if (crs && crs->coordinateSystem()
+                                                   ->axisList()
+                                                   .size() == ndim) {
+                                    return obj;
+                                }
                             }
                         }
                     }
-                }
 
-                std::string msg("several objects matching this name: ");
-                bool first = true;
-                for (const auto &obj : res) {
-                    if (msg.size() > 200) {
-                        msg += ", ...";
-                        break;
+                    std::string msg("several objects matching this name: ");
+                    bool first = true;
+                    for (const auto &obj : res) {
+                        if (msg.size() > 200) {
+                            msg += ", ...";
+                            break;
+                        }
+                        if (!first) {
+                            msg += ", ";
+                        }
+                        first = false;
+                        msg += obj->nameStr();
                     }
-                    if (!first) {
-                        msg += ", ";
-                    }
-                    first = false;
-                    msg += obj->nameStr();
+                    throw ParsingException(msg);
                 }
-                throw ParsingException(msg);
-            }
-            goOn = true;
-            throw ParsingException("dummy");
-        };
+                goOn = true;
+                throw ParsingException("dummy");
+            };
 
         const auto searchCRS = [&searchObject](const std::string &objectName) {
             bool goOn = false;
@@ -6567,7 +6855,7 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
  * <ul>
  * <li>WKT string</li>
  * <li>PROJ string</li>
- * <li>database code, prefixed by its authoriy. e.g. "EPSG:4326"</li>
+ * <li>database code, prefixed by its authority. e.g. "EPSG:4326"</li>
  * <li>OGC URN. e.g. "urn:ogc:def:crs:EPSG::4326",
  *     "urn:ogc:def:coordinateOperation:EPSG::1671",
  *     "urn:ogc:def:ellipsoid:EPSG::7001"
@@ -6575,6 +6863,7 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
  * <li> OGC URN combining references for compound coordinate reference systems
  *      e.g. "urn:ogc:def:crs,crs:EPSG::2393,crs:EPSG::5717"
  *      We also accept a custom abbreviated syntax EPSG:2393+5717
+ *      or ESRI:103668+EPSG:5703
  * </li>
  * <li> OGC URN combining references for references for projected or derived
  * CRSs
@@ -6584,6 +6873,10 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
  * <li> OGC URN combining references for concatenated operations
  *      e.g.
  * "urn:ogc:def:coordinateOperation,coordinateOperation:EPSG::3895,coordinateOperation:EPSG::1618"</li>
+ * <li>OGC URL for a single CRS. e.g.
+ * "http://www.opengis.net/def/crs/EPSG/0/4326</li> <li>OGC URL for a compound
+ * CRS. e.g
+ * "http://www.opengis.net/def/crs-compound?1=http://www.opengis.net/def/crs/EPSG/0/4326&2=http://www.opengis.net/def/crs/EPSG/0/3855"</li>
  * <li>an Object name. e.g "WGS 84", "WGS 84 / UTM zone 31N". In that case as
  *     uniqueness is not guaranteed, the function may apply heuristics to
  *     determine the appropriate best match.</li>
@@ -6601,7 +6894,7 @@ static BaseObjectNNPtr createFromUserInput(const std::string &text,
  * order and will expect/output coordinates in radians. ProjectedCRS will have
  * easting, northing axis order (except the ones with Transverse Mercator South
  * Orientated projection). In that mode, the epsg:XXXX syntax will be also
- * interprated the same way.
+ * interpreted the same way.
  * @throw ParsingException
  */
 BaseObjectNNPtr createFromUserInput(const std::string &text,
@@ -6618,7 +6911,7 @@ BaseObjectNNPtr createFromUserInput(const std::string &text,
  * <ul>
  * <li>WKT string</li>
  * <li>PROJ string</li>
- * <li>database code, prefixed by its authoriy. e.g. "EPSG:4326"</li>
+ * <li>database code, prefixed by its authority. e.g. "EPSG:4326"</li>
  * <li>OGC URN. e.g. "urn:ogc:def:crs:EPSG::4326",
  *     "urn:ogc:def:coordinateOperation:EPSG::1671",
  *     "urn:ogc:def:ellipsoid:EPSG::7001"
@@ -6651,7 +6944,12 @@ BaseObjectNNPtr createFromUserInput(const std::string &text, PJ_CONTEXT *ctx) {
     DatabaseContextPtr dbContext;
     try {
         if (ctx != nullptr && ctx->cpp_context) {
-            dbContext = ctx->cpp_context->getDatabaseContext().as_nullable();
+            // Only connect to proj.db if needed
+            if (text.find("proj=") == std::string::npos ||
+                text.find("init=") != std::string::npos) {
+                dbContext =
+                    ctx->cpp_context->getDatabaseContext().as_nullable();
+            }
         }
     } catch (const std::exception &) {
     }
@@ -6802,7 +7100,9 @@ WKTParser::guessDialect(const std::string &wkt) noexcept {
         }
     }
     static const char *const wkt2_2019_only_substrings[] = {
-        "CS[TemporalDateTime,", "CS[TemporalCount,", "CS[TemporalMeasure,",
+        "CS[TemporalDateTime,",
+        "CS[TemporalCount,",
+        "CS[TemporalMeasure,",
     };
     for (const auto &substrings : wkt2_2019_only_substrings) {
         if (ci_find(wkt, substrings) != std::string::npos) {
@@ -9080,7 +9380,7 @@ static double getNumericValue(const std::string &paramValue,
 // ---------------------------------------------------------------------------
 namespace {
 template <class T> inline void ignoreRetVal(T) {}
-}
+} // namespace
 
 GeographicCRSNNPtr PROJStringParser::Private::buildGeographicCRS(
     int iStep, int iUnitConvert, int iAxisSwap, bool ignorePROJAxis) {
@@ -9668,14 +9968,15 @@ CRSNNPtr PROJStringParser::Private::buildProjectedCRS(
                    parameters, values)
                    .as_nullable();
 
-        if (is_in_stringlist(methodName, "PROJ ob_tran o_proj=longlat,"
-                                         "PROJ ob_tran o_proj=lonlat,"
-                                         "PROJ ob_tran o_proj=latlon,"
-                                         "PROJ ob_tran o_proj=latlong")) {
-            return DerivedGeographicCRS::create(
-                PropertyMap().set(IdentifiedObject::NAME_KEY, "unnamed"),
-                geogCRS, NN_NO_CHECK(conv),
-                buildEllipsoidalCS(iStep, iUnitConvert, iAxisSwap, false));
+        for (const char *substr :
+             {"PROJ ob_tran o_proj=longlat", "PROJ ob_tran o_proj=lonlat",
+              "PROJ ob_tran o_proj=latlon", "PROJ ob_tran o_proj=latlong"}) {
+            if (starts_with(methodName, substr)) {
+                return DerivedGeographicCRS::create(
+                    PropertyMap().set(IdentifiedObject::NAME_KEY, "unnamed"),
+                    geogCRS, NN_NO_CHECK(conv),
+                    buildEllipsoidalCS(iStep, iUnitConvert, iAxisSwap, false));
+            }
         }
     }
 
@@ -10090,9 +10391,8 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
             } else {
                 for (auto cur = pj->params; cur; cur = cur->next) {
                     const char *equal = strchr(cur->param, '=');
-                    if (equal &&
-                        static_cast<size_t>(equal - cur->param) ==
-                            kv.key.size()) {
+                    if (equal && static_cast<size_t>(equal - cur->param) ==
+                                     kv.key.size()) {
                         if (memcmp(cur->param, kv.key.c_str(), kv.key.size()) ==
                             0) {
                             recognizedByPROJ = (cur->used == 1);
@@ -10190,13 +10490,14 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
                     iProjStep,
                     d->buildProjectedCRS(
                         iProjStep,
-                        d->buildGeographicCRS(
-                            iFirstGeogStep, iFirstUnitConvert < iFirstGeogStep
-                                                ? iFirstUnitConvert
-                                                : -1,
-                            iFirstAxisSwap < iFirstGeogStep ? iFirstAxisSwap
-                                                            : -1,
-                            true),
+                        d->buildGeographicCRS(iFirstGeogStep,
+                                              iFirstUnitConvert < iFirstGeogStep
+                                                  ? iFirstUnitConvert
+                                                  : -1,
+                                              iFirstAxisSwap < iFirstGeogStep
+                                                  ? iFirstAxisSwap
+                                                  : -1,
+                                              true),
                         iFirstUnitConvert < iFirstGeogStep ? iSecondUnitConvert
                                                            : iFirstUnitConvert,
                         iFirstAxisSwap < iFirstGeogStep ? iSecondAxisSwap

@@ -37,7 +37,7 @@ to which specific parameters, such as central meridians, have been applied.
 The Earth is divided into 60 zones each generally 6° wide in longitude.
 Bounding meridians are evenly divisible by 6°, and zones are
 numbered from 1 to 60 proceeding east from the 180th meridian from Greenwich
-with minor exceptions [Snyder1987]_.
+with minor exceptions :cite:`Snyder1987`.
 
 Usage
 #####
@@ -47,7 +47,7 @@ Convert geodetic coordinate to UTM Zone 32 on the northern hemisphere::
     $ echo 12 56 | proj +proj=utm +zone=32
     687071.44       6210141.33
 
-Convert geodetic coordinate to UTM Zone 59 on the souther hemisphere::
+Convert geodetic coordinate to UTM Zone 59 on the southern hemisphere::
 
     $ echo 174 -44 | proj +proj=utm +zone=59 +south
     740526.32       5123750.87

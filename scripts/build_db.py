@@ -29,6 +29,7 @@
 ###############################################################################
 
 import os
+import re
 import sqlite3
 import sys
 
@@ -46,6 +47,15 @@ def ingest_sqlite_dump(cursor, filename):
             line = line.decode('utf-8') #python3
         else:
             line = str(line) # python2
+
+        # Historically this script was developped with code columns using TEXT
+        # so keep it that way to minimized changes in it, and in the diff of
+        # generated .sql files
+        line = line.replace('INTEGER_OR_TEXT', 'TEXT')
+
+        # Same for WITHOUT ROWID
+        line = line.replace('WITHOUT ROWID', '')
+
         sql += line
         if sqlite3.complete_statement(sql):
             sql = sql.strip()
@@ -91,8 +101,26 @@ def fill_ellipsoid(proj_db_cursor):
 
 
 def fill_extent(proj_db_cursor):
+    #proj_db_cursor.execute(
+    #    "INSERT INTO extent SELECT ?, extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecatedFROM epsg.epsg_extent", (EPSG_AUTHORITY,))
     proj_db_cursor.execute(
-        "INSERT INTO extent SELECT ?, extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated FROM epsg.epsg_extent", (EPSG_AUTHORITY,))
+        "SELECT extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated FROM epsg.epsg_extent")
+    res = proj_db_cursor.fetchall()
+    for (extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated) in res:
+        try:
+            # Some new records have longitudes outside [-180,180]
+            if bbox_west_bound_lon and bbox_west_bound_lon < -180:
+                # print( extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated)
+                bbox_west_bound_lon += 360
+            if bbox_east_bound_lon and bbox_east_bound_lon > 180:
+                # print( extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated)
+                bbox_east_bound_lon -= 360
+            proj_db_cursor.execute(
+                "INSERT INTO extent VALUES (?,?,?,?,?,?,?,?,?)", (EPSG_AUTHORITY, extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated))
+        except sqlite3.IntegrityError as e:
+            print(e)
+            print(extent_code, extent_name, extent_description, bbox_south_bound_lat, bbox_north_bound_lat, bbox_west_bound_lon, bbox_east_bound_lon, deprecated)
+            raise
 
 
 def fill_scope(proj_db_cursor):
@@ -148,6 +176,12 @@ def compute_publication_date(datum_code, datum_name, frame_reference_epoch, publ
             publication_date += '-01-01'
         elif len(publication_date) == 7:
             publication_date += '-01'
+        elif len(publication_date) == 4+1+4:
+            m = re.search('([0-9]{4})-([0-9]{4})', publication_date)
+            if m:
+                publication_date = m.group(1)
+            else:
+                assert False, (datum_code, datum_name, publication_date)
         else:
             assert len(publication_date) == 10, (datum_code, datum_name, publication_date)
     else:
@@ -208,13 +242,30 @@ def fill_datumensemble(proj_db_cursor):
             proj_db_cursor.execute(
             "INSERT INTO " + datum_ensemble_member_table + " (ensemble_auth_name, ensemble_code, member_auth_name, member_code, sequence) VALUES (?, ?, ?, ?, ?)", (EPSG_AUTHORITY, datum_code, EPSG_AUTHORITY, member_code, sequence))
 
+handled_coord_sys_type = "('Cartesian', 'vertical', 'ellipsoidal', 'spherical', 'ordinal')"
+
 def fill_coordinate_system(proj_db_cursor):
     proj_db_cursor.execute(
-        "INSERT INTO coordinate_system SELECT ?, coord_sys_code, coord_sys_type, dimension FROM epsg.epsg_coordinatesystem", (EPSG_AUTHORITY,))
+        "INSERT INTO coordinate_system SELECT ?, coord_sys_code, coord_sys_type, dimension FROM epsg.epsg_coordinatesystem WHERE coord_sys_type IN " + handled_coord_sys_type, (EPSG_AUTHORITY,))
+    proj_db_cursor.execute("SELECT coord_sys_name, coord_sys_code, coord_sys_type, dimension FROM epsg.epsg_coordinatesystem WHERE coord_sys_type NOT IN " + handled_coord_sys_type)
+    res = proj_db_cursor.fetchall()
+    for row in res:
+        print('Skipping coordinate system %s' % str(row))
 
 
 def fill_axis(proj_db_cursor):
-    proj_db_cursor.execute("INSERT INTO axis SELECT ?, coord_axis_code, coord_axis_name, coord_axis_abbreviation, coord_axis_orientation, ?, coord_sys_code, coord_axis_order, CASE WHEN uom_code IS NULL THEN NULL ELSE ? END, uom_code FROM epsg.epsg_coordinateaxis ca LEFT JOIN epsg.epsg_coordinateaxisname can ON ca.coord_axis_name_code = can.coord_axis_name_code", (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
+    proj_db_cursor.execute(
+        "INSERT INTO axis "
+        "SELECT ?, coord_axis_code, coord_axis_name, coord_axis_abbreviation, "
+        "coord_axis_orientation, ?, ca.coord_sys_code, coord_axis_order, "
+        "CASE WHEN uom_code IS NULL THEN NULL ELSE ? END, uom_code "
+        "FROM epsg.epsg_coordinateaxis ca "
+        "LEFT JOIN epsg.epsg_coordinateaxisname can "
+        "ON ca.coord_axis_name_code = can.coord_axis_name_code "
+        "JOIN epsg.epsg_coordinatesystem cs "
+        "ON cs.coord_sys_code = ca.coord_sys_code "
+        "WHERE coord_sys_type IN " + handled_coord_sys_type,
+        (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
 
 
 def fill_geodetic_crs(proj_db_cursor):
@@ -234,6 +285,23 @@ def fill_vertical_crs(proj_db_cursor):
     #proj_db_cursor.execute(
     #    "INSERT INTO crs SELECT ?, coord_ref_sys_code, coord_ref_sys_kind FROM epsg.epsg_coordinatereferencesystem WHERE coord_ref_sys_kind IN ('vertical') AND datum_code IS NOT NULL", (EPSG_AUTHORITY,))
     proj_db_cursor.execute("INSERT INTO vertical_crs SELECT ?, coord_ref_sys_code, coord_ref_sys_name, NULL, ?, coord_sys_code, ?, datum_code, deprecated FROM epsg.epsg_coordinatereferencesystem WHERE coord_ref_sys_kind IN ('vertical') AND datum_code IS NOT NULL", (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
+
+    proj_db_cursor.execute("SELECT * FROM epsg.epsg_coordinatereferencesystem WHERE coord_ref_sys_kind IN ('vertical') AND datum_code IS NULL AND projection_conv_code NOT IN (7812, 7813)")
+    res = proj_db_cursor.fetchall()
+    for row in res:
+        assert False, row
+
+    proj_db_cursor.execute("SELECT * FROM epsg.epsg_coordinatereferencesystem crs1 WHERE crs1.coord_ref_sys_kind IN ('vertical') AND crs1.datum_code IS NULL AND NOT EXISTS (SELECT 1 FROM epsg.epsg_coordinatereferencesystem crs2 WHERE crs2.coord_ref_sys_code = crs1.base_crs_code AND crs2.coord_ref_sys_kind IN ('vertical'))")
+    res = proj_db_cursor.fetchall()
+    for row in res:
+        assert False, row
+
+    # Insert vertical_crs that are based on another one, such as EPSG:8228 that is based on EPSG:5703
+    proj_db_cursor.execute("INSERT INTO vertical_crs SELECT ?, crs1.coord_ref_sys_code, crs1.coord_ref_sys_name, NULL, ?, crs1.coord_sys_code, ?, crs2.datum_code, crs1.deprecated FROM epsg.epsg_coordinatereferencesystem crs1 JOIN epsg.epsg_coordinatereferencesystem crs2 ON crs1.base_crs_code = crs2.coord_ref_sys_code WHERE crs1.coord_ref_sys_kind IN ('vertical') AND crs1.datum_code IS NULL AND crs2.datum_code iS NOT NULL", (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
+
+    # Extra punishment for EPSG:8051 that is based on EPSG:5715 which is based on EPSG:5714
+    proj_db_cursor.execute("INSERT INTO vertical_crs SELECT ?, crs1.coord_ref_sys_code, crs1.coord_ref_sys_name, NULL, ?, crs1.coord_sys_code, ?, crs3.datum_code, crs1.deprecated FROM epsg.epsg_coordinatereferencesystem crs1 JOIN epsg.epsg_coordinatereferencesystem crs2 ON crs1.base_crs_code = crs2.coord_ref_sys_code JOIN epsg.epsg_coordinatereferencesystem crs3 ON crs2.base_crs_code = crs3.coord_ref_sys_code WHERE crs1.coord_ref_sys_kind IN ('vertical') AND crs1.datum_code IS NULL AND crs2.datum_code IS NULL", (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
+
 
 def fill_conversion(proj_db_cursor):
 
@@ -258,7 +326,8 @@ BEGIN
     # the source/target CRS names from the transformation name.
     # Method EPSG:9666 'P6 I=J+90 seismic bin grid coordinate operation' requires more than 7 parameters. Not supported by PROJ for now
     # Idem for EPSG:1049 'P6 I=J-90 seismic bin grid coordinate operation'
-    proj_db_cursor.execute("SELECT coord_op_code, coord_op_name, coord_op_method_code, coord_op_method_name, epsg_coordoperation.deprecated, epsg_coordoperation.remarks FROM epsg.epsg_coordoperation LEFT JOIN epsg.epsg_coordoperationmethod USING (coord_op_method_code) WHERE coord_op_type = 'conversion' AND coord_op_name NOT LIKE '%to DMSH' AND (coord_op_method_code NOT IN (1068, 1069, 9666, 1049) OR coord_op_code IN (7812,7813))")
+    # EPSG:1102 is "Lambert Conic Conformal (1SP variant B)" and is only used at time of writing for specialized CRS EPSG:9548, "Lyon Turin Ferroviaire 2004 (C)"
+    proj_db_cursor.execute("SELECT coord_op_code, coord_op_name, coord_op_method_code, coord_op_method_name, epsg_coordoperation.deprecated, epsg_coordoperation.remarks FROM epsg.epsg_coordoperation LEFT JOIN epsg.epsg_coordoperationmethod USING (coord_op_method_code) WHERE coord_op_type = 'conversion' AND coord_op_name NOT LIKE '%to DMSH' AND (coord_op_method_code NOT IN (1068, 1069, 9666, 1049, 1102) OR coord_op_code IN (7812,7813))")
     for (code, name, method_code, method_name, deprecated, remarks) in proj_db_cursor.fetchall():
         expected_order = 1
         max_n_params = 7
@@ -276,7 +345,7 @@ BEGIN
             if order == max_n_params + 1 and method_code in (1042, 1043):
                 break
             assert order <= max_n_params, (method_code, method_name, order)
-            assert order == expected_order
+            assert order == expected_order, (code, name, method_code, method_name)
             param_auth_name[order - 1] = EPSG_AUTHORITY
             param_code[order - 1] = parameter_code
             param_name[order - 1] = parameter_name
@@ -341,10 +410,18 @@ def fill_projected_crs(proj_db_cursor):
     proj_db_cursor.execute("SELECT ?, coord_ref_sys_code, coord_ref_sys_name, NULL, ?, coord_sys_code, ?, base_crs_code, ?, projection_conv_code, deprecated FROM epsg.epsg_coordinatereferencesystem WHERE coord_ref_sys_kind IN ('projected')", (EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY, EPSG_AUTHORITY))
     for row in proj_db_cursor.fetchall():
         (auth_name, code, name, description, coordinate_system_auth_name, coordinate_system_code, geodetic_crs_auth_name, geodetic_crs_code, conversion_auth_name, conversion_code, deprecated) = row
+        if code == 9549: # "LTF2004(C)"
+            print('Skipping EPSG:9549 LTF2004(C) as we do not handle yet projection method EPSG:1102 is "Lambert Conic Conformal (1SP variant B)"')
+            continue
         proj_db_cursor.execute("SELECT 1 FROM epsg.epsg_coordinatereferencesystem WHERE coord_ref_sys_code = ? AND coord_ref_sys_kind IN ('geographic 2D', 'geographic 3D', 'geocentric')", (geodetic_crs_code,))
         if proj_db_cursor.fetchone():
             #proj_db_cursor.execute("INSERT INTO crs VALUES (?, ?, 'projected')", (EPSG_AUTHORITY, code))
-            proj_db_cursor.execute("INSERT INTO projected_crs VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?)", row)
+            try:
+                proj_db_cursor.execute("INSERT INTO projected_crs VALUES (?,?,?,?,?,?,?,?,?,?,NULL,?)", row)
+            except sqlite3.IntegrityError as e:
+                print(e)
+                print(row)
+                raise
 
 def fill_compound_crs(proj_db_cursor):
     #proj_db_cursor.execute(
@@ -478,9 +555,17 @@ def fill_grid_transformation(proj_db_cursor):
         param_uom_code = [None for i in range(max_n_params)]
 
         iterator = proj_db_cursor.execute("SELECT sort_order, cop.parameter_code, parameter_name, parameter_value, param_value_file_ref, uom_code from epsg_coordoperationparam cop LEFT JOIN epsg_coordoperationparamvalue copv LEFT JOIN epsg_coordoperationparamusage copu ON cop.parameter_code = copv.parameter_code AND copu.parameter_code = copv.parameter_code WHERE copu.coord_op_method_code = copv.coord_op_method_code AND coord_op_code = ? AND copv.coord_op_method_code = ? ORDER BY sort_order", (code, method_code))
+        first = True
+        order_inc = 0
         for (order, parameter_code, parameter_name, parameter_value, param_value_file_ref, uom_code) in iterator:
+            if first and order == 0:
+                # Some new records have sort_order starting at 0 rather than 1
+                # print(code, name, method_code, method_name, param_code, param_name, order)
+                order_inc = 1
+            order += order_inc
+            first = False
             assert order <= max_n_params
-            assert order == expected_order
+            assert order == expected_order, (code, name, method_code, method_name, param_code, param_name, order)
             if parameter_value is not None:
                 assert param_value_file_ref is None or len(param_value_file_ref) == 0, (order, parameter_code, parameter_name, parameter_value, param_value_file_ref, uom_code)
             if param_value_file_ref is not None and len(param_value_file_ref) != 0:
@@ -493,7 +578,7 @@ def fill_grid_transformation(proj_db_cursor):
             expected_order += 1
         n_params = expected_order - 1
 
-        assert param_code[0] in (1050, 8656, 8657, 8666, 8732, 8727), (code, param_code[0])
+        assert param_code[0] in (1048, 1050, 8656, 8657, 8666, 8732, 8727), (code, param_code[0])
 
         grid2_param_auth_name = None
         grid2_param_code = None
@@ -514,13 +599,30 @@ def fill_grid_transformation(proj_db_cursor):
             grid2_param_code = param_code[1]
             grid2_param_name = param_name[1]
             grid2_value = param_value[1]
+        # NOTE: update src/iso19111/operation/transformation.cpp if adding
+        # new methods
         # 1071: Vertical Offset by Grid Interpolation (NZLVD)
         # 1080: Vertical Offset by Grid Interpolation (BEV AT)
         # 1081: Geographic3D to GravityRelatedHeight (BEV AT)
         # 1083: Geog3D to Geog2D+Vertical (AUSGeoid v2)
         # 1084: Vertical Offset by Grid Interpolation (gtx)
         # 1085: Vertical Offset by Grid Interpolation (asc)
-        elif method_code in (1071, 1080, 1081, 1083, 1084, 1085) and n_params == 2:
+        # 1088: Geog3D to Geog2D+GravityRelatedHeight (gtx)
+        # 1089: Geog3D to Geog2D+GravityRelatedHeight (BEV AT)
+        # 1090: Geog3D to Geog2D+GravityRelatedHeight (CGG 2013)
+        # 1091: Geog3D to Geog2D+GravityRelatedHeight (CI)
+        # 1092: Geog3D to Geog2D+GravityRelatedHeight (EGM2008)
+        # 1093: Geog3D to Geog2D+GravityRelatedHeight (Gravsoft)
+        # 1094: Geog3D to Geog2D+GravityRelatedHeight (IGN1997)
+        # 1095: Geog3D to Geog2D+GravityRelatedHeight (IGN2009)
+        # 1096: Geog3D to Geog2D+GravityRelatedHeight (OSGM15-Ire)
+        # 1097: Geog3D to Geog2D+GravityRelatedHeight (OSGM-GB)
+        # 1098: Geog3D to Geog2D+GravityRelatedHeight (SA 2010)
+        # 1100: Geog3D to Geog2D+GravityRelatedHeight (PL txt)
+        # 1101: Vertical Offset by Grid Interpolation (PL txt)
+        # 1103: Geog3D to Geog2D+GravityRelatedHeight (EGM)
+        # 1105: Geog3D to Geog2D+GravityRelatedHeight (ITAL2005)
+        elif method_code in (1071, 1080, 1081, 1083, 1084, 1085, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095, 1096, 1097, 1098, 1100, 1101, 1103, 1105) and n_params == 2:
             assert param_code[1] == 1048, (code, method_code, param_code[1])
             interpolation_crs_auth_name = EPSG_AUTHORITY
             interpolation_crs_code = str(int(param_value[1])) # needed to avoid codes like XXXX.0
@@ -548,8 +650,12 @@ def fill_grid_transformation(proj_db_cursor):
                )
 
         #proj_db_cursor.execute("INSERT INTO coordinate_operation VALUES (?,?,'grid_transformation')", (EPSG_AUTHORITY, code))
-        proj_db_cursor.execute('INSERT INTO grid_transformation VALUES (' +
-            '?,?,?, ?, ?,?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?, ?,?, ?,?)', arg)
+        try:
+            proj_db_cursor.execute('INSERT INTO grid_transformation VALUES (' +
+                '?,?,?, ?, ?,?,?, ?,?, ?,?, ?, ?,?,?,?, ?,?,?,?, ?,?, ?,?)', arg)
+        except sqlite3.IntegrityError as e:
+            print(arg)
+            raise
 
 def fill_other_transformation(proj_db_cursor):
     # 9601: Longitude rotation

@@ -55,19 +55,17 @@ The following command-line options can appear in any order:
 .. option:: -lu
 
     Gives a listing of all the units that may be selected with the *+units=*
-    option.
+    option. (Default units are meters.)
 
 .. option:: -f <format>
 
     Where *format* is a printf format string to control the output form of the
-    geographic coordinate values. The default mode is DMS for geographic
-    coordinates and ``"%.3f"`` for distance.
+    geographic coordinate values. The default mode is DMS.
 
 .. option:: -F <format>
 
     Where *format* is a printf format string to control the output form of the distance
-    value (``-F``). The default mode is DMS for geographic coordinates and
-    ``"%.3f"`` for distance.
+    value. The default mode is ``"%.3f"``.
 
 .. option:: -w<n>
 
@@ -202,13 +200,4 @@ Further reading
 
     **proj(1)**, **cs2cs(1)**, **cct(1)**, **gie(1)**, **projinfo(1)**, **projsync(1)**
 
-    Bugs
-    ****
-
-    A list of know bugs can be found at https://github.com/OSGeo/PROJ/issues
-    where new bug reports can be submitted to.
-
-    Home page
-    *********
-
-    https://proj.org/
+    .. include:: common_man.rst

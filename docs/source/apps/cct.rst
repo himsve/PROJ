@@ -25,7 +25,7 @@ by :c:func:`proj_create`, provided it expresses a coordinate operation
     - a proj-string,
     - a WKT string,
     - an object code (like "EPSG:1671" "urn:ogc:def:coordinateOperation:EPSG::1671"),
-    - an object name. e.g "ITRF2014 to ETRF2014 (1)". In that case as
+    - an object name. e.g. "ITRF2014 to ETRF2014 (1)". In that case as
       uniqueness is not guaranteed, heuristics are applied to determine the appropriate best match.
     - a OGC URN combining references for concatenated operations
       (e.g. "urn:ogc:def:coordinateOperation,coordinateOperation:EPSG::3895,coordinateOperation:EPSG::1618")
@@ -242,13 +242,4 @@ Hence, in honour of *cct* (the geodesist) this is :program:`cct` (the program).
 
     **proj(1)**, **cs2cs(1)**, **geod(1)**, **gie(1)**, **projinfo(1)**, **projsync(1)**
 
-    Bugs
-    ****
-
-    A list of know bugs can be found at https://github.com/OSGeo/PROJ/issues
-    where new bug reports can be submitted to.
-
-    Home page
-    *********
-
-    https://proj.org/
+    .. include:: common_man.rst

@@ -317,6 +317,17 @@ const UnitOfMeasure UnitOfMeasure::METRE("metre", 1.0,
                                          UnitOfMeasure::Type::LINEAR,
                                          Identifier::EPSG, "9001");
 
+/** \brief Foot, unit of measure of type LINEAR. */
+const UnitOfMeasure UnitOfMeasure::FOOT("foot", 0.3048,
+                                        UnitOfMeasure::Type::LINEAR,
+                                        Identifier::EPSG, "9002");
+
+/** \brief US survey foot, unit of measure of type LINEAR. */
+const UnitOfMeasure UnitOfMeasure::US_FOOT("US survey foot",
+                                           0.304800609601219241184,
+                                           UnitOfMeasure::Type::LINEAR,
+                                           Identifier::EPSG, "9003");
+
 /** \brief Degree, unit of measure of type ANGULAR. */
 const UnitOfMeasure UnitOfMeasure::DEGREE("degree", M_PI / 180.,
                                           UnitOfMeasure::Type::ANGULAR,
@@ -363,7 +374,7 @@ const UnitOfMeasure UnitOfMeasure::ARC_SECOND_PER_YEAR(
     "arc-seconds per year", M_PI / 180. / 3600. / 31556925.445,
     UnitOfMeasure::Type::ANGULAR, Identifier::EPSG, "1043");
 
-/** \brief Part-sper-million per year, unit of measure of type SCALE. */
+/** \brief Parts-per-million per year, unit of measure of type SCALE. */
 const UnitOfMeasure UnitOfMeasure::PPM_PER_YEAR("parts per million per year",
                                                 1e-6 / 31556925.445,
                                                 UnitOfMeasure::Type::SCALE,

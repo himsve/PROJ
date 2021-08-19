@@ -17,7 +17,7 @@ foreach(_variableName ${_variableNames})
 endforeach()
 
 add_executable(testappprojinfo testappprojinfo.c)
-target_link_libraries(testappprojinfo ${${USE_PROJ_NAME}_LIBRARIES})
+target_link_libraries(testappprojinfo PRIVATE ${${USE_PROJ_NAME}_LIBRARIES})
 
 include(CTest)
 
@@ -27,6 +27,13 @@ if(APPLE)
 elseif(UNIX)
   set(LDD_CL "ldd")
   set(EXPECTED_LDD_CL_OUT "${CMAKE_PREFIX_PATH}/lib/libproj")
+elseif(CMAKE_GENERATOR STREQUAL "MSYS Makefiles")
+  set(LDD_CL "ldd")
+  # Convert to Unix-style path
+  execute_process(
+    COMMAND cygpath -u ${CMAKE_PREFIX_PATH}/bin/libproj
+	OUTPUT_VARIABLE EXPECTED_LDD_CL_OUT
+	OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
 
 if(LDD_CL)

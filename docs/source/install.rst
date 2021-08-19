@@ -58,8 +58,10 @@ software packages. After installation you can use PROJ from the OSGeo4W shell.
 To install PROJ do the following:
 
 .. note::
-    If you have already installed software via OSGeo4W on your computer it is
-    likely that PROJ is already installed.
+    If you have already installed software via OSGeo4W on your computer, or if
+    you have already installed QGIS on your computer, it is likely that PROJ is 
+    already installed. Type "OSGeo4W Shell" in your start menu and check whether
+    that gives a match.
 
 1. Download either the `32 bit`_ or `64 bit`_ installer.
 2. Run the OSGeo4W setup program.
@@ -101,14 +103,14 @@ On Debian and similar systems (e.g. Ubuntu) the APT package manager is used::
 Fedora
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-On Fedora the dnf package manager is used::
+On Fedora the :program:`dnf` package manager is used::
 
     sudo dnf install proj
 
 Red Hat
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-On Red Hat based system packages are installed with yum::
+On Red Hat based system packages are installed with :program:`yum`::
 
     sudo yum install proj
 
@@ -153,6 +155,12 @@ FSF's configuration procedure is used to ease installation of the PROJ system.
     Follow the CMake installation guide if you are not using a UNIX-like
     operating system.
 
+If you are building from the git repository you have to first run::
+
+    ./autogen.sh
+
+which will generate a ``configure`` script that can be used in the next step.
+
 The default destination path prefix for installed files is ``/usr/local``.
 Results from the installation script will be placed into subdirectories ``bin``,
 ``include``, ``lib``, and ``man/man1``. If this default path prefix
@@ -166,12 +174,6 @@ If another path prefix is required, then execute::
 
 In either case, the directory of the prefix path must exist and be writable by
 the installer.
-
-If you are building from the git repository you have to first run::
-
-    ./autogen.sh
-
-which will generate a configure script that can be used as described above.
 
 With the data files in place we can now build and install PROJ::
 

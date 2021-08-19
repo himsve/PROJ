@@ -9,10 +9,8 @@ CREATE INDEX grid_transformation_idx ON grid_transformation(source_crs_auth_name
 CREATE INDEX other_transformation_idx ON other_transformation(source_crs_auth_name, source_crs_code, target_crs_auth_name, target_crs_code);
 CREATE INDEX concatenated_operation_idx ON concatenated_operation(source_crs_auth_name, source_crs_code, target_crs_auth_name, target_crs_code);
 
--- Do an explicit foreign_key_check as foreign key checking is a no-op within
--- a transaction. Unfortunately we can't ask for this to be an error, so this
--- is just for verbose output. In Makefile, we check this separately
-PRAGMA foreign_key_check;
+-- We don't need to select by auth_name, code so nullify them to save space
+UPDATE usage SET auth_name = NULL, code = NULL;
 
 -- Final consistency checks
 CREATE TABLE dummy(foo);
@@ -75,14 +73,14 @@ FOR EACH ROW BEGIN
                       AND g1.source_crs_code = g2.source_crs_code
                       AND g1.target_crs_auth_name = g2.target_crs_auth_name
                       AND g1.target_crs_code = g2.target_crs_code
-                      WHERE g1.auth_name = 'PROJ' AND g2.auth_name = 'EPSG')
+                      WHERE g1.auth_name = 'PROJ' AND g1.code NOT LIKE '%_RESTRICTED_TO_VERTCRS%' AND g2.auth_name = 'EPSG')
         OR EXISTS (SELECT 1 FROM grid_transformation g1
                       JOIN grid_transformation g2
                       ON g1.source_crs_auth_name = g2.target_crs_auth_name
                       AND g1.source_crs_code = g2.target_crs_code
                       AND g1.target_crs_auth_name = g1.source_crs_auth_name
                       AND g1.target_crs_code = g1.source_crs_code
-                      WHERE g1.auth_name = 'PROJ' AND g2.auth_name = 'EPSG');
+                      WHERE g1.auth_name = 'PROJ' AND g1.code NOT LIKE '%_RESTRICTED_TO_VERTCRS%' AND g2.auth_name = 'EPSG');
 
     SELECT RAISE(ABORT, 'Arg! there is now a EPSG:102100 object. Hack in createFromUserInput() will no longer work')
         WHERE EXISTS(SELECT 1 FROM crs_view WHERE auth_name = 'EPSG' AND code = '102100');
@@ -118,21 +116,126 @@ FOR EACH ROW BEGIN
                       g.method_name LIKE 'Geographic3D to GravityRelatedHeight%' AND
                       g.target_crs_auth_name || g.target_crs_code NOT IN
                       (SELECT auth_name || code FROM vertical_crs));
-    SELECT RAISE(ABORT, 'One grid_transformation with Geographic3D to GravityRelatedHeight has not its source_crs in geodetic_crs table with type = ''geographic 3D''')
+    SELECT RAISE(ABORT, 'One grid_transformation with Geographic3D to GravityRelatedHeight or Geog3D to Geog2D+XXX has not its source_crs in geodetic_crs table with type = ''geographic 3D''')
         WHERE EXISTS (SELECT * FROM grid_transformation g WHERE
                       g.deprecated = 0 AND
-                      g.method_name LIKE 'Geographic3D to GravityRelatedHeight%' AND
-                      NOT (g.auth_name = 'EPSG' AND g.code IN (7648, 7649, 7650)) AND -- those are wrongly registered as they use a geocentric CRS. Reported to EPSG
+                      (g.method_name LIKE 'Geographic3D to %' OR g.method_name LIKE 'Geog3D to %') AND
                       g.source_crs_auth_name || g.source_crs_code NOT IN
                       (SELECT auth_name || code FROM geodetic_crs
                        WHERE type = 'geographic 3D'));
+
+    -- check that grids with 'Vertical Offset by Grid Interpolation' methods are properly registered
+    SELECT RAISE(ABORT, 'One grid_transformation with Vertical Offset by Grid Interpolation has not its source_crs in vertical_crs table')
+        WHERE EXISTS (SELECT * FROM grid_transformation g WHERE
+                      g.method_name LIKE 'Vertical Offset by Grid Interpolation%' AND
+                      g.source_crs_auth_name || g.source_crs_code NOT IN
+                      (SELECT auth_name || code FROM vertical_crs));
+    SELECT RAISE(ABORT, 'One grid_transformation with Vertical Offset by Grid Interpolation has not its target_crs in vertical_crs table')
+        WHERE EXISTS (SELECT * FROM grid_transformation g WHERE
+                      g.method_name LIKE 'Vertical Offset by Grid Interpolation%' AND
+                      g.target_crs_auth_name || g.target_crs_code NOT IN
+                      (SELECT auth_name || code FROM vertical_crs));
+
+    -- check that Helmert transformations have source and target of the same nature (the fkey already checks they are geodetic_crs)
+    SELECT RAISE(ABORT, 'One helmert_transformation has a source CRS of a different nature than its target CRS')
+        WHERE EXISTS (SELECT helmert_transformation.auth_name,
+                             helmert_transformation.code,
+                             helmert_transformation.name,
+                             crs1.type AS crs1_type,
+                             crs2.type AS crs2_type
+                      FROM helmert_transformation
+                      JOIN geodetic_crs crs1 ON
+                          crs1.auth_name = source_crs_auth_name AND crs1.code = source_crs_code
+                      JOIN geodetic_crs crs2 ON
+                          crs2.auth_name = target_crs_auth_name AND crs2.code = target_crs_code
+                      WHERE helmert_transformation.deprecated = 0 AND crs1.type != crs2.type);
+
+    -- check that the method used by a Helmert transformation is consistent with the dimensionality of the CRS
+    SELECT RAISE(ABORT, 'The domain of the method of helmert_transformation is not consistent with the dimensionality of the CRS')
+        WHERE EXISTS (SELECT helmert_transformation.auth_name,
+                             helmert_transformation.code,
+                             helmert_transformation.name,
+                             helmert_transformation.method_name,
+                             crs.type AS crs_type
+                      FROM helmert_transformation
+                      JOIN geodetic_crs crs ON
+                          crs.auth_name = source_crs_auth_name AND crs.code = source_crs_code
+                      WHERE helmert_transformation.deprecated = 0 AND
+                          ((method_name LIKE '%geog2D domain%' AND crs.type != 'geographic 2D') OR
+                           (method_name LIKE '%geog3D domain%' AND crs.type != 'geographic 3D') OR
+                           (method_name LIKE '%geocentric domain%' AND crs.type != 'geocentric')));
+
+    -- check that a time-dependent Helmert transformation has its source or target CRS being dyanmic
+    SELECT RAISE(ABORT, 'A time-dependent Helmert transformations has its source and target CRS both non-dynamic')
+        WHERE EXISTS (SELECT helmert_transformation.auth_name,
+                             helmert_transformation.code,
+                             helmert_transformation.name
+                      FROM helmert_transformation
+                      JOIN geodetic_crs crs1 ON
+                          crs1.auth_name = source_crs_auth_name AND crs1.code = source_crs_code
+                      JOIN geodetic_crs crs2 ON
+                          crs2.auth_name = target_crs_auth_name AND crs2.code = target_crs_code
+                      JOIN geodetic_datum gd1 ON
+                          gd1.auth_name = crs1.datum_auth_name AND gd1.code = crs1.datum_code
+                      JOIN geodetic_datum gd2 ON
+                          gd2.auth_name = crs2.datum_auth_name AND gd2.code = crs2.datum_code
+                      WHERE helmert_transformation.deprecated = 0 AND
+                            method_name LIKE 'Time-dependent%' AND
+                            gd1.frame_reference_epoch IS NULL AND
+                            gd2.frame_reference_epoch IS NULL);
+
+    -- check that transformations operations between vertical CRS are from/into a vertical CRS
+    SELECT RAISE(ABORT, 'A transformation operating on vertical CRS has a source CRS not being a vertical CRS')
+        WHERE EXISTS (SELECT other_transformation.auth_name,
+                             other_transformation.code,
+                             other_transformation.name
+                      FROM other_transformation
+                      LEFT JOIN vertical_crs crs ON
+                          crs.auth_name = source_crs_auth_name AND crs.code = source_crs_code
+                      WHERE other_transformation.deprecated = 0 AND
+                            method_name IN ('Vertical Offset', 'Height Depth Reversal', 'Change of Vertical Unit') AND
+                            crs.code IS NULL);
+    SELECT RAISE(ABORT, 'AA transformation operating on vertical CRS has a target CRS not being a vertical CRS')
+        WHERE EXISTS (SELECT other_transformation.auth_name,
+                             other_transformation.code,
+                             other_transformation.name
+                      FROM other_transformation
+                      LEFT JOIN vertical_crs crs ON
+                          crs.auth_name = target_crs_auth_name AND crs.code = target_crs_code
+                      WHERE other_transformation.deprecated = 0 AND
+                            method_name IN ('Vertical Offset', 'Height Depth Reversal', 'Change of Vertical Unit') AND
+                            crs.code IS NULL);
+
+    -- check that 'Geographic2D with Height Offsets' transformations have a compound CRS with a geog2D as source
+    SELECT RAISE(ABORT, 'A transformation Geographic2D with Height Offsets does not have a compound CRS with a geog2D as source')
+        WHERE EXISTS (SELECT other_transformation.auth_name,
+                             other_transformation.code,
+                             other_transformation.name
+                      FROM other_transformation
+                      LEFT JOIN compound_crs ccrs ON
+                          ccrs.auth_name = source_crs_auth_name AND ccrs.code = source_crs_code
+                      LEFT JOIN geodetic_crs gcrs ON
+                          gcrs.auth_name = horiz_crs_auth_name AND gcrs.code = horiz_crs_code
+                      WHERE other_transformation.deprecated = 0 AND
+                            method_name = 'Geographic2D with Height Offsets' AND
+                            (gcrs.code IS NULL OR gcrs.type != 'geographic 2D'));
+    SELECT RAISE(ABORT, 'A transformation Geographic2D with Height Offsets does not have a geographic 3D CRS as target')
+        WHERE EXISTS (SELECT other_transformation.auth_name,
+                             other_transformation.code,
+                             other_transformation.name
+                      FROM other_transformation
+                      LEFT JOIN geodetic_crs gcrs ON
+                          gcrs.auth_name = target_crs_auth_name AND gcrs.code = target_crs_code
+                      WHERE other_transformation.deprecated = 0 AND
+                            method_name = 'Geographic2D with Height Offsets' AND
+                            (gcrs.type IS NULL OR gcrs.type != 'geographic 3D'));
 
     -- check that transformations intersect the area of use of their source/target CRS
     -- EPSG, ESRI and IGNF have cases where this does not hold.
     SELECT RAISE(ABORT, 'The area of use of at least one coordinate_operation does not intersect the one of its source CRS')
         WHERE EXISTS (SELECT * FROM coordinate_operation_view v, crs_view c, usage vu, extent ve, usage cu, extent ce WHERE
                       v.deprecated = 0 AND
-                      v.auth_name NOT IN ('EPSG', 'ESRI', 'IGNF') AND
+                      (v.table_name = 'grid_transformation' OR v.auth_name NOT IN ('EPSG', 'ESRI', 'IGNF')) AND
                       v.source_crs_auth_name = c.auth_name AND
                       v.source_crs_code = c.code AND
                       vu.object_table_name = v.table_name AND
@@ -145,11 +248,14 @@ FOR EACH ROW BEGIN
                       cu.object_code = c.code AND
                       cu.extent_auth_name = ce.auth_name AND
                       cu.extent_code = ce.code AND
-                      NOT (ce.south_lat < ve.north_lat AND ve.south_lat < ce.north_lat));
+                      NOT ((ce.south_lat < ve.north_lat AND ve.south_lat < ce.north_lat) OR
+                          (ce.west_lon < ce.east_lon AND ve.west_lon < ve.east_lon AND
+                              NOT (ce.west_lon < ve.east_lon AND ve.west_lon < ce.east_lon))) );
     SELECT RAISE(ABORT, 'The area of use of at least one coordinate_operation does not intersect the one of its target CRS')
         WHERE EXISTS (SELECT * FROM coordinate_operation_view v, crs_view c, usage vu, extent ve, usage cu, extent ce WHERE
                       v.deprecated = 0 AND
-                      v.auth_name NOT IN ('EPSG', 'ESRI', 'IGNF') AND
+                      ((v.table_name = 'grid_transformation' AND NOT (v.auth_name = 'IGNF' AND v.code = 'TSG1185'))
+                       OR v.auth_name NOT IN ('EPSG', 'ESRI', 'IGNF')) AND
                       v.target_crs_auth_name = c.auth_name AND
                       v.target_crs_code = c.code AND
                       vu.object_table_name = v.table_name AND
@@ -162,7 +268,9 @@ FOR EACH ROW BEGIN
                       cu.object_code = c.code AND
                       cu.extent_auth_name = ce.auth_name AND
                       cu.extent_code = ce.code AND
-                      NOT (ce.south_lat < ve.north_lat AND ve.south_lat < ce.north_lat));
+                      NOT ((ce.south_lat < ve.north_lat AND ve.south_lat < ce.north_lat) OR
+                          (ce.west_lon < ce.east_lon AND ve.west_lon < ve.east_lon AND
+                              NOT (ce.west_lon < ve.east_lon AND ve.west_lon < ce.east_lon))) );
 
     -- check geoid_model table
     SELECT RAISE(ABORT, 'missing GEOID99 in geoid_model')
@@ -184,9 +292,15 @@ FOR EACH ROW BEGIN
     SELECT RAISE(ABORT, 'missing au_ga_AUSGeoid98.tif')
         WHERE NOT EXISTS(SELECT 1 FROM grid_alternatives WHERE proj_grid_name = 'au_ga_AUSGeoid98.tif');
 
+    -- check PROJ.VERSION value
+    SELECT RAISE(ABORT, 'Value of PROJ.VERSION entry of metadata tables not substituted by actual value')
+        WHERE (SELECT 1 FROM metadata WHERE key = 'PROJ.VERSION' AND value LIKE '$%');
+
 END;
 INSERT INTO dummy DEFAULT VALUES;
 DROP TRIGGER final_checks;
 DROP TABLE dummy;
+
+ANALYZE;
 
 VACUUM;

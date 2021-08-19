@@ -203,7 +203,7 @@ double proj_roundtrip (PJ *P, PJ_DIRECTION direction, int n, PJ_COORD *coord) {
 
 /**************************************************************************************/
 int pj_get_suggested_operation(PJ_CONTEXT*,
-                               const std::vector<CoordOperation>& opList,
+                               const std::vector<PJCoordOperation>& opList,
                                const int iExcluded[2],
                                PJ_DIRECTION direction,
                                PJ_COORD coord)
@@ -243,7 +243,15 @@ int pj_get_suggested_operation(PJ_CONTEXT*,
             // onshore. So in a general way, prefer a onshore area to a
             // offshore one.
             if( iBest < 0 ||
-                (alt.accuracy >= 0 && alt.accuracy < bestAccuracy &&
+                (alt.accuracy >= 0 &&
+                (alt.accuracy < bestAccuracy ||
+                 // If two operations have the same accuracy, use the one that
+                 // is contained within a larger one
+                 (alt.accuracy == bestAccuracy &&
+                  alt.minxSrc > opList[iBest].minxSrc &&
+                  alt.minySrc > opList[iBest].minySrc &&
+                  alt.maxxSrc < opList[iBest].maxxSrc &&
+                  alt.maxySrc < opList[iBest].maxySrc)) &&
                 !alt.isOffshore) ) {
                 iBest = i;
                 bestAccuracy = alt.accuracy;
@@ -346,6 +354,8 @@ similarly, but prefers the 2D resp. 3D interfaces if available.
                         if (proj_log_level(P->ctx, PJ_LOG_TELL) >= PJ_LOG_DEBUG) {
                             std::string msg("Using coordinate operation ");
                             msg += alt.name;
+                            msg += " as a fallback due to lack of more "
+                                   "appropriate operations";
                             pj_log(P->ctx, PJ_LOG_DEBUG, msg.c_str());
                         }
                         P->iCurCoordOp = i;
@@ -993,25 +1003,31 @@ static void reproject_bbox(PJ* pjGeogToCrs,
         maxx = -maxx;
         maxy = -maxy;
 
-        std::vector<double> x(21 * 4), y(21 * 4);
-        for( int j = 0; j <= 20; j++ )
+        constexpr int N_STEPS = 20;
+        constexpr int N_STEPS_P1 = N_STEPS+1;
+        constexpr int XY_SIZE = N_STEPS_P1 * 4;
+        std::vector<double> x(XY_SIZE);
+        std::vector<double> y(XY_SIZE);
+        const double step_lon = (east_lon - west_lon) / N_STEPS;
+        const double step_lat = (north_lat - south_lat) / N_STEPS;
+        for( int j = 0; j <= N_STEPS; j++ )
         {
-            x[j] = west_lon + j * (east_lon - west_lon) / 20;
+            x[j] = west_lon + j * step_lon;
             y[j] = south_lat;
-            x[21+j] = west_lon + j * (east_lon - west_lon) / 20;
-            y[21+j] = north_lat;
-            x[21*2+j] = west_lon;
-            y[21*2+j] = south_lat + j * (north_lat - south_lat) / 20;
-            x[21*3+j] = east_lon;
-            y[21*3+j] = south_lat + j * (north_lat - south_lat) / 20;
+            x[N_STEPS_P1+j] = x[j];
+            y[N_STEPS_P1+j] = north_lat;
+            x[N_STEPS_P1*2+j] = west_lon;
+            y[N_STEPS_P1*2+j] = south_lat + j * step_lat;
+            x[N_STEPS_P1*3+j] = east_lon;
+            y[N_STEPS_P1*3+j] = y[N_STEPS_P1*2+j];
         }
         proj_trans_generic (
             pjGeogToCrs, PJ_FWD,
-                &x[0], sizeof(double), 21 * 4,
-                &y[0], sizeof(double), 21 * 4,
+                &x[0], sizeof(double), XY_SIZE,
+                &y[0], sizeof(double), XY_SIZE,
                 nullptr, 0, 0,
                 nullptr, 0, 0);
-        for( int j = 0; j < 21 * 4; j++ )
+        for( int j = 0; j < XY_SIZE; j++ )
         {
             if( x[j] != HUGE_VAL && y[j] != HUGE_VAL )
             {
@@ -1034,7 +1050,7 @@ static PJ* add_coord_op_to_list(
                             PJ* pjGeogToSrc,
                             PJ* pjGeogToDst,
                             bool isOffshore,
-                            std::vector<CoordOperation>& altCoordOps) {
+                            std::vector<PJCoordOperation>& altCoordOps) {
 /*****************************************************************************/
 
     double minxSrc;
@@ -1193,7 +1209,7 @@ PJ  *proj_create_crs_to_crs (PJ_CONTEXT *ctx, const char *source_crs, const char
 
 
 /*****************************************************************************/
-std::vector<CoordOperation> pj_create_prepared_operations(PJ_CONTEXT *ctx,
+std::vector<PJCoordOperation> pj_create_prepared_operations(PJ_CONTEXT *ctx,
                                                      const PJ *source_crs,
                                                      const PJ *target_crs,
                                                      PJ_OBJ_LIST* op_list)
@@ -1218,7 +1234,7 @@ std::vector<CoordOperation> pj_create_prepared_operations(PJ_CONTEXT *ctx,
 
     try
     {
-        std::vector<CoordOperation> preparedOpList;
+        std::vector<PJCoordOperation> preparedOpList;
 
         // Iterate over source->target candidate transformations and reproject
         // their long-lat bounding box into the source CRS.
@@ -1350,11 +1366,9 @@ PJ  *proj_create_crs_to_crs_from_pj (PJ_CONTEXT *ctx, const PJ *source_crs, cons
                                             area->east_lon_degree,
                                             area->north_lat_degree);
     }
-    else {
-        proj_operation_factory_context_set_spatial_criterion(
-            ctx, operation_ctx, PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION);
-    }
 
+    proj_operation_factory_context_set_spatial_criterion(
+        ctx, operation_ctx, PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION);
     proj_operation_factory_context_set_grid_availability_use(
         ctx, operation_ctx,
         proj_context_is_network_enabled(ctx) ?
@@ -1407,6 +1421,7 @@ PJ  *proj_create_crs_to_crs_from_pj (PJ_CONTEXT *ctx, const PJ *source_crs, cons
 
     P->alternativeCoordinateOperations = std::move(preparedOpList);
     // The returned P is rather dummy
+    P->descr = "Set of coordinate operations";
     P->iso_obj = nullptr;
     P->fwd = nullptr;
     P->inv = nullptr;
@@ -1610,7 +1625,7 @@ PJ_INFO proj_info (void) {
 
     /* build search path string */
     auto ctx = pj_get_default_ctx();
-    if (!ctx || ctx->search_paths.empty()) {
+    if (ctx->search_paths.empty()) {
         const auto searchpaths = pj_get_default_searchpaths(ctx);
         for( const auto& path: searchpaths ) {
             buf = path_append(buf, path.c_str(), &buf_size);
@@ -1624,8 +1639,8 @@ PJ_INFO proj_info (void) {
     free(const_cast<char*>(info.searchpath));
     info.searchpath = buf ? buf : empty;
 
-    info.paths = ctx ? ctx->c_compat_paths : nullptr;
-    info.path_count = ctx ? static_cast<int>(ctx->search_paths.size()) : 0;
+    info.paths = ctx->c_compat_paths;
+    info.path_count = static_cast<int>(ctx->search_paths.size());
 
     pj_release_lock ();
     return info;

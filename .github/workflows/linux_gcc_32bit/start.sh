@@ -11,14 +11,14 @@ ARCH=i386
 dpkg --add-architecture i386
 apt update -y
 
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends  -o APT::Immediate-Configure=0  \
     autoconf automake libtool gcc-multilib g++-multilib g++ sqlite3 \
     python3-pip \
     make cmake ccache pkg-config tar zip \
     libsqlite3-dev:$ARCH libtiff-dev:$ARCH libcurl4-openssl-dev:$ARCH \
     jq
 
-pip3 install --user jsonschema
+python3 -m pip install --user jsonschema
 export PATH=$HOME/.local/bin:$PATH
 
 export CXXFLAGS='-g -O2 -m32 -D_GLIBCXX_ASSERTIONS'

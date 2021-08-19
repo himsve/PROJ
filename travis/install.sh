@@ -3,13 +3,15 @@
 set -e
 
 UNAME="$(uname)" || UNAME=""
-if test "${UNAME}" = "Linux" ; then
-    NPROC=$(nproc);
-elif test "${UNAME}" = "Darwin" ; then
-    NPROC=$(sysctl -n hw.ncpu);
-fi
 if test "x${NPROC}" = "x"; then
-    NPROC=2;
+    if test "${UNAME}" = "Linux" ; then
+        NPROC=$(nproc);
+    elif test "${UNAME}" = "Darwin" ; then
+        NPROC=$(sysctl -n hw.ncpu);
+    fi
+    if test "x${NPROC}" = "x"; then
+        NPROC=2;
+    fi
 fi
 echo "NPROC=${NPROC}"
 export MAKEFLAGS="-j ${NPROC}"
@@ -26,7 +28,19 @@ make dist-all >/dev/null
 TAR_FILENAME=`ls *.tar.gz`
 TAR_DIRECTORY=`basename $TAR_FILENAME .tar.gz`
 tar xvzf $TAR_FILENAME
-cd $TAR_DIRECTORY
+cd ..
+
+# compare with CMake's dist
+mkdir build_cmake
+cd build_cmake
+cmake -DBUILD_TESTING=OFF ..
+make dist
+tar xzf $TAR_FILENAME
+cd ..
+diff -qr build_autoconf/$TAR_DIRECTORY build_cmake/$TAR_DIRECTORY || true
+
+# continue build from autoconf
+cd build_autoconf/$TAR_DIRECTORY
 
 # There's a nasty #define CS in a Solaris system header. Avoid being caught about that again
 CXXFLAGS="-DCS=do_not_use_CS_for_solaris_compat $CXXFLAGS"
@@ -112,6 +126,7 @@ if [ "$BUILD_NAME" != "linux_gcc8" -a "$BUILD_NAME" != "linux_gcc_32bit" ]; then
     find /tmp/proj_cmake_install
     if [ $BUILD_NAME = "linux_gcc" ] || [ $BUILD_NAME = "osx" ]; then
         $TRAVIS_BUILD_DIR/test/postinstall/test_cmake.sh /tmp/proj_cmake_install
+        $TRAVIS_BUILD_DIR/test/postinstall/test_pkg-config.sh /tmp/proj_cmake_install
     else
         echo "Skipping test_cmake.sh test for $BUILD_NAME"
     fi

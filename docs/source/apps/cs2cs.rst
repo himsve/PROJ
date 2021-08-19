@@ -261,7 +261,7 @@ The following script
 ::
 
     cs2cs +proj=latlong +datum=NAD83 +to +proj=utm +zone=10 +datum=NAD27 -r <<EOF
-    45d15'33.1" 111.5W
+    45°15'33.1" 111.5W
     45d15.551666667N -111d30
     +45.25919444444 111d30'000w
     EOF
@@ -317,13 +317,4 @@ outputs
 
     **proj(1)**, **cct(1)**, **geod(1)**, **gie(1)**, **projinfo(1)**, **projsync(1)**
 
-    Bugs
-    ****
-
-    A list of know bugs can be found at https://github.com/OSGeo/PROJ/issues
-    where new bug reports can be submitted to.
-
-    Home page
-    *********
-
-    https://proj.org/
+    .. include:: common_man.rst

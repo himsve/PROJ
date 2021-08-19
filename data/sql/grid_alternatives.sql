@@ -22,6 +22,7 @@ VALUES
 -- source file contains undulation in first band, and deflection in 2nd and 3d band
 ('AUSGeoid2020_20180201.gsb','au_ga_AUSGeoid2020_20180201.tif','AUSGeoid2020_20180201.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/au_ga_AUSGeoid2020_20180201.tif',1,1,NULL),
 ('AGQG_20191107.gsb','au_ga_AGQG_20191107.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/au_ga_AGQG_20191107.tif',1,1,NULL),
+('AGQG_20201120.gsb','au_ga_AGQG_20201120.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/au_ga_AGQG_20201120.tif',1,1,NULL),
 
 -- au_icsm - Australian Intergovernmental Committee on Surveying and Mapping
 ('A66 National (13.09.01).gsb','au_icsm_A66_National_13_09_01.tif','A66_National_13_09_01.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/au_icsm_A66_National_13_09_01.tif',1,1,NULL),
@@ -85,6 +86,8 @@ VALUES
 -- ch_swisstopo - Swisstopo Federal Office of Topography
 ('CHENyx06a.gsb','ch_swisstopo_CHENyx06a.tif','CHENyx06a.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/ch_swisstopo_CHENyx06a.tif',1,1,NULL),
 ('CHENyx06_ETRS.gsb','ch_swisstopo_CHENyx06_ETRS.tif','CHENyx06_ETRS.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/ch_swisstopo_CHENyx06_ETRS.tif',1,1,NULL),
+('chgeo2004_ETRS.agr','ch_swisstopo_chgeo2004_ETRS89_LHN95.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/ch_swisstopo_chgeo2004_ETRS89_LHN95.tif',1,1,NULL),
+('chgeo2004_htrans_ETRS.agr','ch_swisstopo_chgeo2004_ETRS89_LN02.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/ch_swisstopo_chgeo2004_ETRS89_LN02.tif',1,1,NULL),
 
 -- de_adv - Arbeitsgemeinschaft der Vermessungsverwaltungender der Länder der Bundesrepublik Deutschland (AdV)
 ('BETA2007.gsb','de_adv_BETA2007.tif','BETA2007.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/de_adv_BETA2007.tif',1,1,NULL),
@@ -115,6 +118,10 @@ VALUES
 ('SPED2ETV2.gsb','es_ign_SPED2ETV2.tif',NULL,'GTiff','hgridshift',0,NULL,'https://cdn.proj.org/es_ign_SPED2ETV2.tif',1,1,NULL),
 ('EGM08_REDNAP.txt','es_ign_egm08-rednap.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/es_ign_egm08-rednap.tif',1,1,NULL),
 ('EGM08_REDNAP_Canarias.txt','es_ign_egm08-rednap-canarias.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/es_ign_egm08-rednap-canarias.tif',1,1,NULL),
+
+-- eur_nkg - Nordic Geodetic Commission
+('eur_nkg_nkgrf03vel_realigned.tif','eur_nkg_nkgrf03vel_realigned.tif',NULL,'GTiff','velocity_grid',0,NULL,'https://cdn.proj.org/eur_nkg_nkgrf03vel_realigned.tif',1,1,NULL),
+('eur_nkg_nkgrf17vel.tif','eur_nkg_nkgrf17vel.tif',NULL,'GTiff','velocity_grid',0,NULL,'https://cdn.proj.org/eur_nkg_nkgrf17vel.tif',1,1,NULL),
 
 -- fi_nls - National Land Survey of Finland (MML)
 ('fi_nls_n43_n60.json','fi_nls_n43_n60.json',NULL,'JSON','tinshift',0,NULL,'https://cdn.proj.org/fi_nls_n43_n60.json',1,1,NULL),
@@ -179,6 +186,13 @@ VALUES
 ('NOT-YET-IN-GRID-TRANSFORMATION-rdcorr2018.gsb','nl_nsgi_rdcorr2018.tif','rdcorr2018.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/nl_nsgi_rdcorr2018.tif',1,1,NULL),
 ('naptrans2008.gtx','','naptrans2008.gtx','GTX','geoid_like',0,NULL,'https://salsa.debian.org/debian-gis-team/proj-rdnap/raw/upstream/2008/naptrans2008.gtx',1,0,NULL),
 ('rdtrans2008.gsb','','rdtrans2008.gsb','NTv2','hgridshift',0,NULL,'https://salsa.debian.org/debian-gis-team/proj-rdnap/raw/upstream/2008/rdtrans2008.gsb',1,0,NULL),
+
+-- no_kv - Kartverket
+-- Norwegian grids
+('HREF2018B_NN2000_EUREF89.gtx','no_kv_HREF2018B_NN2000_EUREF89.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/no_kv_HREF2018B_NN2000_EUREF89.tif',1,1,NULL),
+('href2008a.gtx','no_kv_href2008a.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/no_kv_href2008a.tif',1,1,NULL),
+('no_kv_NKGETRF14_EPSG7922_2000.tif','no_kv_NKGETRF14_EPSG7922_2000.tif',NULL,'GTiff','geocentricoffset',0,NULL,'https://cdn.proj.org/no_kv_NKGETRF14_EPSG7922_2000.tif',1,1,NULL),
+('no_kv_ETRS89NO_NGO48_TIN.json','no_kv_ETRS89NO_NGO48_TIN.json',NULL,'JSON','tinshift',0,NULL,'https://cdn.proj.org/no_kv_ETRS89NO_NGO48_TIN.json',1,1,NULL),
 
 -- nz_linz - New Zealand
 ('nzgd2kgrid0005.gsb','nz_linz_nzgd2kgrid0005.tif','nzgd2kgrid0005.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/nz_linz_nzgd2kgrid0005.tif',1,1,NULL),

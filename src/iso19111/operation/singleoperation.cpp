@@ -103,10 +103,8 @@ GridDescription::GridDescription(const GridDescription &) = default;
 GridDescription::GridDescription(GridDescription &&other) noexcept
     : shortName(std::move(other.shortName)),
       fullName(std::move(other.fullName)),
-      packageName(std::move(other.packageName)),
-      url(std::move(other.url)),
-      directDownload(other.directDownload),
-      openLicense(other.openLicense),
+      packageName(std::move(other.packageName)), url(std::move(other.url)),
+      directDownload(other.directDownload), openLicense(other.openLicense),
       available(other.available) {}
 
 //! @endcond
@@ -1108,8 +1106,8 @@ SingleOperation::parameterValue(const std::string &paramName,
  * @param epsg_code the parameter EPSG code
  * @return the value, or nullptr if not found.
  */
-const ParameterValuePtr &SingleOperation::parameterValue(int epsg_code) const
-    noexcept {
+const ParameterValuePtr &
+SingleOperation::parameterValue(int epsg_code) const noexcept {
     for (const auto &genOpParamvalue : parameterValues()) {
         auto opParamvalue = dynamic_cast<const OperationParameterValue *>(
             genOpParamvalue.get());
@@ -1160,8 +1158,8 @@ SingleOperation::parameterValueMeasure(int epsg_code) const noexcept {
 
 //! @cond Doxygen_Suppress
 
-double SingleOperation::parameterValueNumericAsSI(int epsg_code) const
-    noexcept {
+double
+SingleOperation::parameterValueNumericAsSI(int epsg_code) const noexcept {
     const auto &val = parameterValue(epsg_code);
     if (val && val->type() == ParameterValue::Type::MEASURE) {
         return val->value().getSIValue();
@@ -1179,8 +1177,8 @@ double SingleOperation::parameterValueNumeric(
 }
 
 double SingleOperation::parameterValueNumeric(
-    const char *param_name, const common::UnitOfMeasure &targetUnit) const
-    noexcept {
+    const char *param_name,
+    const common::UnitOfMeasure &targetUnit) const noexcept {
     const auto &val = parameterValue(param_name, 0);
     if (val && val->type() == ParameterValue::Type::MEASURE) {
         return val->value().convertToUnit(targetUnit);
@@ -1527,31 +1525,39 @@ std::list<std::string> SingleOperation::validateParameters() const {
 
     const auto &l_method = method();
     const auto &methodName = l_method->nameStr();
-    const MethodMapping *methodMapping = nullptr;
     const auto methodEPSGCode = l_method->getEPSGCode();
+
+    const auto findMapping = [methodEPSGCode, &methodName](
+                                 const MethodMapping *mappings,
+                                 size_t mappingCount) -> const MethodMapping * {
+        if (methodEPSGCode != 0) {
+            for (size_t i = 0; i < mappingCount; ++i) {
+                const auto &mapping = mappings[i];
+                if (methodEPSGCode == mapping.epsg_code) {
+                    return &mapping;
+                }
+            }
+        }
+        for (size_t i = 0; i < mappingCount; ++i) {
+            const auto &mapping = mappings[i];
+            if (metadata::Identifier::isEquivalentName(mapping.wkt2_name,
+                                                       methodName.c_str())) {
+                return &mapping;
+            }
+        }
+        return nullptr;
+    };
+
     size_t nProjectionMethodMappings = 0;
     const auto projectionMethodMappings =
         getProjectionMethodMappings(nProjectionMethodMappings);
-    for (size_t i = 0; i < nProjectionMethodMappings; ++i) {
-        const auto &mapping = projectionMethodMappings[i];
-        if (metadata::Identifier::isEquivalentName(mapping.wkt2_name,
-                                                   methodName.c_str()) ||
-            (methodEPSGCode != 0 && methodEPSGCode == mapping.epsg_code)) {
-            methodMapping = &mapping;
-        }
-    }
+    const MethodMapping *methodMapping =
+        findMapping(projectionMethodMappings, nProjectionMethodMappings);
     if (methodMapping == nullptr) {
         size_t nOtherMethodMappings = 0;
         const auto otherMethodMappings =
             getOtherMethodMappings(nOtherMethodMappings);
-        for (size_t i = 0; i < nOtherMethodMappings; ++i) {
-            const auto &mapping = otherMethodMappings[i];
-            if (metadata::Identifier::isEquivalentName(mapping.wkt2_name,
-                                                       methodName.c_str()) ||
-                (methodEPSGCode != 0 && methodEPSGCode == mapping.epsg_code)) {
-                methodMapping = &mapping;
-            }
-        }
+        methodMapping = findMapping(otherMethodMappings, nOtherMethodMappings);
     }
     if (!methodMapping) {
         res.emplace_back("Unknown method " + methodName);
@@ -1663,7 +1669,7 @@ std::list<std::string> SingleOperation::validateParameters() const {
     }
 
     return res;
-}
+} // namespace operation
 
 // ---------------------------------------------------------------------------
 
@@ -2142,6 +2148,18 @@ bool SingleOperation::exportToPROJStringGeneric(
         formatter->addStep("axisswap");
         formatter->addParam("order", "1,2,-3");
         return true;
+    }
+
+    const char *prefix = "PROJ-based operation method: ";
+    if (starts_with(method()->nameStr(), prefix)) {
+        auto projString = method()->nameStr().substr(strlen(prefix));
+        try {
+            formatter->ingestPROJString(projString);
+            return true;
+        } catch (const io::ParsingException &e) {
+            throw io::FormattingException(
+                std::string("ingestPROJString() failed: ") + e.what());
+        }
     }
 
     return false;

@@ -282,7 +282,7 @@ typedef    PJ_COORD  (* PJ_OPERATOR)    (PJ_COORD, PJ *);
 #define PJD_GRIDSHIFT 3
 #define PJD_WGS84     4   /* WGS84 (or anything considered equivalent) */
 
-struct CoordOperation
+struct PJCoordOperation
 {
     int idxInOriginalList;
     double minxSrc = 0.0;
@@ -298,7 +298,7 @@ struct CoordOperation
     double accuracy = -1.0;
     bool isOffshore = false;
 
-    CoordOperation(int idxInOriginalListIn,
+    PJCoordOperation(int idxInOriginalListIn,
                    double minxSrcIn, double minySrcIn, double maxxSrcIn, double maxySrcIn,
                    double minxDstIn, double minyDstIn, double maxxDstIn, double maxyDstIn,
                    PJ* pjIn, const std::string& nameIn, double accuracyIn, bool isOffshoreIn):
@@ -311,9 +311,20 @@ struct CoordOperation
     {
     }
 
-    CoordOperation(const CoordOperation&) = delete;
+    PJCoordOperation(const PJCoordOperation&) = delete;
 
-    CoordOperation(CoordOperation&& other):
+    PJCoordOperation(PJ_CONTEXT* ctx, const PJCoordOperation& other):
+        idxInOriginalList(other.idxInOriginalList),
+        minxSrc(other.minxSrc), minySrc(other.minySrc), maxxSrc(other.maxxSrc), maxySrc(other.maxySrc),
+        minxDst(other.minxDst), minyDst(other.minyDst), maxxDst(other.maxxDst), maxyDst(other.maxyDst),
+        pj(proj_clone(ctx, other.pj)),
+        name(std::move(other.name)),
+        accuracy(other.accuracy),
+        isOffshore(other.isOffshore)
+    {
+    }
+
+    PJCoordOperation(PJCoordOperation&& other):
         idxInOriginalList(other.idxInOriginalList),
         minxSrc(other.minxSrc), minySrc(other.minySrc), maxxSrc(other.maxxSrc), maxySrc(other.maxySrc),
         minxDst(other.minxDst), minyDst(other.minyDst), maxxDst(other.maxxDst), maxyDst(other.maxyDst),
@@ -324,9 +335,29 @@ struct CoordOperation
         other.pj = nullptr;
     }
 
-    CoordOperation& operator=(const CoordOperation&) = delete;
+    PJCoordOperation& operator=(const PJCoordOperation&) = delete;
 
-    ~CoordOperation()
+    bool operator == (const PJCoordOperation& other) const {
+        return idxInOriginalList == other.idxInOriginalList &&
+               minxSrc == other.minxSrc &&
+               minySrc == other.minySrc &&
+               maxxSrc == other.maxxSrc &&
+               maxySrc == other.maxySrc &&
+               minxDst == other.minxDst &&
+               minyDst == other.minyDst &&
+               maxxDst == other.maxxDst &&
+               maxyDst == other.maxyDst &&
+               name == other.name &&
+               proj_is_equivalent_to(pj, other.pj, PJ_COMP_STRICT) &&
+               accuracy == other.accuracy &&
+               isOffshore == other.isOffshore;
+    }
+
+    bool operator != (const PJCoordOperation& other) const {
+        return !(operator==(other));
+    }
+
+    ~PJCoordOperation()
     {
         proj_destroy(pj);
     }
@@ -545,7 +576,7 @@ struct PJconsts {
     /*************************************************************************************
      proj_create_crs_to_crs() alternative coordinate operations
     **************************************************************************************/
-    std::vector<CoordOperation> alternativeCoordinateOperations{};
+    std::vector<PJCoordOperation> alternativeCoordinateOperations{};
     int iCurCoordOp = -1;
 
     /*************************************************************************************
@@ -647,7 +678,7 @@ struct projFileApiCallbackAndData
 struct pj_ctx{
     std::string lastFullErrorMessage{}; // used by proj_context_errno_string
     int     last_errno = 0;
-    int     debug_level = 0;
+    int     debug_level = PJ_LOG_ERROR;
     void    (*logger)(void *, int, const char *) = nullptr;
     void    *logger_app_data = nullptr;
     struct projCppContext* cpp_context = nullptr; /* internal context for C++ code */
@@ -688,7 +719,6 @@ struct pj_ctx{
     pj_ctx& operator= (const pj_ctx&) = delete;
 
     projCppContext* get_cpp_context();
-    void safeAutoCloseDbIfNeeded();
     void set_search_paths(const std::vector<std::string>& search_paths_in);
     void set_ca_bundle_path(const std::string& ca_bundle_path_in);
 
@@ -820,13 +850,13 @@ std::string PROJ_DLL pj_context_get_grid_cache_filename(PJ_CONTEXT *ctx);
 void PROJ_DLL pj_context_set_user_writable_directory(PJ_CONTEXT* ctx, const std::string& path);
 std::string PROJ_DLL pj_get_relative_share_proj(PJ_CONTEXT *ctx);
 
-std::vector<CoordOperation> pj_create_prepared_operations(PJ_CONTEXT *ctx,
+std::vector<PJCoordOperation> pj_create_prepared_operations(PJ_CONTEXT *ctx,
                                                      const PJ *source_crs,
                                                      const PJ *target_crs,
                                                      PJ_OBJ_LIST* op_list);
 
 int pj_get_suggested_operation(PJ_CONTEXT *ctx,
-                               const std::vector<CoordOperation>& opList,
+                               const std::vector<PJCoordOperation>& opList,
                                const int iExcluded[2],
                                PJ_DIRECTION direction,
                                PJ_COORD coord);
@@ -836,6 +866,8 @@ const PJ_UNITS *pj_list_angular_units();
 
 void pj_clear_hgridshift_knowngrids_cache();
 void pj_clear_vgridshift_knowngrids_cache();
+
+void pj_clear_sqlite_cache();
 
 PJ_LP pj_generic_inverse_2d(PJ_XY xy, PJ *P, PJ_LP lpInitial);
 
@@ -886,6 +918,7 @@ void pj_acquire_lock(void);
 void pj_release_lock(void);
 void pj_cleanup_lock(void);
 
+bool pj_log_active( PJ_CONTEXT *ctx, int level );
 void pj_log( PJ_CONTEXT * ctx, int level, const char *fmt, ... );
 void pj_stderr_logger( void *, int, const char * );
 

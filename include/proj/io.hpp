@@ -661,7 +661,7 @@ class PROJ_GCC_DLL IPROJStringExportable {
      * <li>For PROJStringFormatter::Convention::PROJ_4, format a string
      * compatible with the OGRSpatialReference::exportToProj4() of GDAL
      * &lt;=2.3. It is only compatible of a few CRS objects. The PROJ string
-     * will also contain a +type=crs parameter to disambiguish the nature of
+     * will also contain a +type=crs parameter to disambiguate the nature of
      * the string from a CoordinateOperation.
      * <ul>
      * <li>For a crs::GeographicCRS, returns a proj=longlat string, with
@@ -711,8 +711,8 @@ class PROJ_GCC_DLL WKTNode {
     PROJ_DLL void addChild(WKTNodeNNPtr &&child);
     PROJ_DLL const WKTNodePtr &lookForChild(const std::string &childName,
                                             int occurrence = 0) const noexcept;
-    PROJ_DLL int countChildrenOfName(const std::string &childName) const
-        noexcept;
+    PROJ_DLL int
+    countChildrenOfName(const std::string &childName) const noexcept;
 
     PROJ_DLL std::string toString() const;
 
@@ -741,7 +741,7 @@ PROJ_DLL util::BaseObjectNNPtr createFromUserInput(const std::string &text,
 
 // ---------------------------------------------------------------------------
 
-/** \brief Parse a WKT string into the appropriate suclass of util::BaseObject.
+/** \brief Parse a WKT string into the appropriate subclass of util::BaseObject.
  */
 class PROJ_GCC_DLL WKTParser {
   public:
@@ -784,7 +784,8 @@ class PROJ_GCC_DLL WKTParser {
 
 // ---------------------------------------------------------------------------
 
-/** \brief Parse a PROJ string into the appropriate suclass of util::BaseObject.
+/** \brief Parse a PROJ string into the appropriate subclass of
+ * util::BaseObject.
  */
 class PROJ_GCC_DLL PROJStringParser {
   public:
@@ -837,6 +838,19 @@ class PROJ_GCC_DLL DatabaseContext {
     PROJ_DLL std::set<std::string> getAuthorities() const;
 
     PROJ_DLL std::vector<std::string> getDatabaseStructure() const;
+
+    PROJ_DLL void startInsertStatementsSession();
+
+    PROJ_DLL std::string
+    suggestsCodeFor(const common::IdentifiedObjectNNPtr &object,
+                    const std::string &authName, bool numericCode);
+
+    PROJ_DLL std::vector<std::string> getInsertStatementsFor(
+        const common::IdentifiedObjectNNPtr &object,
+        const std::string &authName, const std::string &code, bool numericCode,
+        const std::vector<std::string> &allowedAuthorities = {"EPSG", "PROJ"});
+
+    PROJ_DLL void stopInsertStatementsSession();
 
     PROJ_PRIVATE :
         //! @cond Doxygen_Suppress
@@ -987,6 +1001,9 @@ class PROJ_GCC_DLL AuthorityFactory {
         const std::string &sourceCRSCode,
         const std::string &targetCRSCode) const;
 
+    PROJ_DLL std::list<std::string>
+    getGeoidModels(const std::string &code) const;
+
     PROJ_DLL const std::string &getAuthority() PROJ_PURE_DECL;
 
     /** Object type. */
@@ -1076,6 +1093,8 @@ class PROJ_GCC_DLL AuthorityFactory {
         /** Name of the projection method for a projected CRS. Might be empty
          * even for projected CRS in some cases. */
         std::string projectionMethodName;
+        /** Name of the celestial body of the CRS (e.g. "Earth") */
+        std::string celestialBodyName;
 
         //! @cond Doxygen_Suppress
         CRSInfo();
@@ -1110,6 +1129,19 @@ class PROJ_GCC_DLL AuthorityFactory {
     };
 
     PROJ_DLL std::list<UnitInfo> getUnitList() const;
+
+    /** Celestial Body information */
+    struct CelestialBodyInfo {
+        /** Authority name */
+        std::string authName;
+        /** Name */
+        std::string name;
+        //! @cond Doxygen_Suppress
+        CelestialBodyInfo();
+        //! @endcond
+    };
+
+    PROJ_DLL std::list<CelestialBodyInfo> getCelestialBodyList() const;
 
     PROJ_DLL static AuthorityFactoryNNPtr
     create(const DatabaseContextNNPtr &context,

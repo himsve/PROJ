@@ -33,7 +33,7 @@ Transformation setup
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 The objects returned by the functions defined in this section have minimal
-interaction with the the functions of the
+interaction with the functions of the
 `C API for ISO-19111 functionality`_, and vice versa. See its introduction
 paragraph for more details.
 
@@ -180,7 +180,7 @@ paragraph for more details.
     coordinate reference systems.
 
     This is the same as :c:func:`proj_create_crs_to_crs` except that the source and
-    target CRS are passed as PJ* objects which must of the CRS variety.
+    target CRS are passed as PJ* objects which must be of the CRS variety.
 
     :param `options`: a list of NUL terminated options, or NULL.
 
@@ -285,7 +285,7 @@ Coordinate transformation
         3. of length one, i.e. a constant, which will be treated as a fully
            populated array of that constant value
 
-    .. note:: Even though he coordinate components are named :c:data:`x`, :c:data:`y`,
+    .. note:: Even though the coordinate components are named :c:data:`x`, :c:data:`y`,
               :c:data:`z` and :c:data:`t`, axis ordering of the to and from CRS
               is respected. Transformations exhibit the same behavior
               as if they were gathered in a :c:type:`PJ_COORD` struct.
@@ -623,7 +623,13 @@ Distances
     Calculate geodesic distance between two points in geodetic coordinates. The
     calculated distance is between the two points located on the ellipsoid.
 
-    :param P: Transformation object
+    The coordinates in :c:data:`a` and :c:data:`b` needs to be given as longitude
+    and latitude in radians. Note that the axis order of the :c:data:`P` object
+    is not taken into account in this function, so even though a CRS object comes
+    with axis ordering latitude/longitude coordinates used in this function should
+    be reordered as longitude/latitude.
+
+    :param P: Transformation or CRS object
     :type P: const :c:type:`PJ` *
     :param PJ_COORD a: Coordinate of first point
     :param PJ_COORD b: Coordinate of second point
@@ -635,7 +641,13 @@ Distances
     Similar to :c:func:`proj_lp_dist` but also takes the height above the ellipsoid
     into account.
 
-    :param P: Transformation object
+    The coordinates in :c:data:`a` and :c:data:`b` needs to be given as longitude
+    and latitude in radians. Note that the axis order of the :c:data:`P` object
+    is not taken into account in this function, so even though a CRS object comes
+    with axis ordering latitude/longitude coordinates used in this function should
+    be reordered as longitude/latitude.
+
+    :param P: Transformation or CRS object
     :type P: const :c:type:`PJ` *
     :param PJ_COORD a: Coordinate of first point
     :param PJ_COORD b: Coordinate of second point
@@ -656,6 +668,27 @@ Distances
     :param PJ_COORD a: First coordinate
     :param PJ_COORD b: Second coordinate
     :returns: `double` Distance between :c:data:`a` and :c:data:`b` in meters.
+
+.. c:function:: PJ_COORD proj_geod(const PJ *P, PJ_COORD a, PJ_COORD b)
+
+    Calculate the geodesic distance as well as forward and reverse azimuth
+    between two points on the ellipsoid.
+
+    The coordinates in :c:data:`a` and :c:data:`b` needs to be given as longitude
+    and latitude in radians. Note that the axis order of the :c:data:`P` object
+    is not taken into account in this function, so even though a CRS object comes
+    with axis ordering latitude/longitude coordinates used in this function should
+    be reordered as longitude/latitude.
+
+    :param P: Transformation or CRS object
+    :type P: const :c:type:`PJ` *
+    :param PJ_COORD a: Coordinate of first point
+    :param PJ_COORD b: Coordinate of second point
+    :returns: `PJ_COORD` where the first value is the distance between :c:data:`a`
+              and :c:data:`b` in meters, the second value is the forward azimuth
+              and the third value is the reverse azimuth. The fourth coordinate
+              value is unused.
+
 
 
 Various
@@ -897,7 +930,7 @@ The PJ* objects returned by :c:func:`proj_create_from_wkt`,
 :c:func:`proj_create_from_database` and other functions in that section
 will have generally minimal interaction with the functions declared in the
 previous sections (calling those functions on those objects
-will either return an error or default/non-sensical values). The exception is
+will either return an error or default/nonsensical values). The exception is
 for ISO19111 objects of type CoordinateOperation that can be exported as a
 valid PROJ pipeline. In this case,  objects will work for example with
 :c:func:`proj_trans_generic`.

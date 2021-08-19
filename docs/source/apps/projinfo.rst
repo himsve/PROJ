@@ -25,11 +25,16 @@ Synopsis
     |    [--show-superseded] [--hide-ballpark] [--accuracy {accuracy}]
     |    [--allow-ellipsoidal-height-as-vertical-crs]
     |    [--boundcrs-to-wgs84]
+    |    [--authority name]
     |    [--main-db-path path] [--aux-db-path path]*
+    |    [--dump-db-structure]
     |    [--identify] [--3d]
+    |    [--output-id AUTH:CODE]
     |    [--c-ify] [--single-line]
-    |    --searchpaths | --remote-data | {object_definition} |
-    |    {object_reference} | (-s {srs_def} -t {srs_def})
+    |    --searchpaths | --remote-data |
+    |    --list-crs [list-crs-filter] |
+    |    --dump-db-structure [{object_definition} | {object_reference}] |
+    |    {object_definition} | {object_reference} | (-s {srs_def} -t {srs_def})
     |
 
     where {object_definition} or {srs_def} is one of the possibilities accepted
@@ -78,7 +83,7 @@ The following control parameters can appear in any order:
 .. option:: -o formats
 
     formats is a comma separated combination of:
-    ``all``, ``default``, ``PROJ``, ``WKT_ALL``, ``WKT2:2015``, ``WKT2:2019``, ``WKT1:GDAL``, ``WKT1:ESRI``, ``PROJJSON``.
+    ``all``, ``default``, ``PROJ``, ``WKT_ALL``, ``WKT2:2015``, ``WKT2:2019``, ``WKT1:GDAL``, ``WKT1:ESRI``, ``PROJJSON``, ``SQL``.
 
     Except ``all`` and ``default``, other formats can be preceded by ``-`` to disable them.
 
@@ -86,6 +91,8 @@ The following control parameters can appear in any order:
 
     .. note:: Before PROJ 6.3.0, WKT1:GDAL was implicitly calling --boundcrs-to-wgs84.
               This is no longer the case.
+
+    .. note:: When SQL is specified, :option:`--output-id` must be specified.
 
 .. option:: -k crs|operation|datum|ensemble|ellipsoid
 
@@ -134,7 +141,7 @@ The following control parameters can appear in any order:
     Specify how the area of use of coordinate operations found in the database
     are compared to the area of use specified explicitly with :option:`--area` or :option:`--bbox`,
     or derived implicitly from the area of use of the source and target CRS.
-    By default, projinfo will only keep coordinate operations whose are of use
+    By default, :program:`projinfo` will only keep coordinate operations whose are of use
     is strictly within the area of interest (``contains`` strategy).
     If using the ``intersects`` strategy, the spatial test is relaxed, and any
     coordinate operation whose area of use at least partly intersects the
@@ -184,7 +191,7 @@ The following control parameters can appear in any order:
 
     Determine if intermediate (pivot) CRS can be used when researching coordinate
     operation between 2 CRS. A typical example is the WGS84 pivot. By default,
-    projinfo will consider any potential pivot if there is no direct transformation
+    :program:`projinfo` will consider any potential pivot if there is no direct transformation
     ( ``if_no_direct_transformation``). If using the ``never`` strategy,
     only direct transformations between the source and target CRS will be
     used. If using the ``always`` strategy, intermediate CRS will be considered
@@ -225,7 +232,7 @@ The following control parameters can appear in any order:
 
     .. versionadded:: 8.0
 
-    Allow to export a geographic or projected 3D CRS as a compound CRS whose
+    Allows exporting a geographic or projected 3D CRS as a compound CRS whose
     vertical CRS represents the ellipsoidal height.
 
     .. note:: only used for CRS, and with WKT1:GDAL output format
@@ -237,10 +244,20 @@ The following control parameters can appear in any order:
     geographic CRS, and if found, wraps those CRS into a BoundCRS object.
     This is mostly to be used for early-binding approaches.
 
+.. option:: --authority name
+
+    Specify the name of the authority into which to restrict looks up for
+    objects, when specifying an object by name or when coordinate operations are
+    computed. The default is to allow all authorities.
+
+    When used with SQL output, this restricts the authorities to which intermediate
+    objects can belong to (the default is EPSG and PROJ). Note that the authority
+    of the :option:`--output-id` option will also be implicitly added.
+
 .. option:: --main-db-path path
 
-    Specify the name and path of the database to be used by projinfo. The
-    default is proj.db in the PROJ resource directories.
+    Specify the name and path of the database to be used by :program:`projinfo`.
+    The default is :file:`proj.db` in the PROJ resource directories.
 
 .. option:: --aux-db-path path
 
@@ -260,6 +277,25 @@ The following control parameters can appear in any order:
     For example, `+proj=utm +zone=31 +datum=WGS84 +type=crs` will be identified
     with a likelihood of 70% to EPSG:32631
 
+.. option:: --dump-db-structure
+
+    .. versionadded:: 8.1
+
+    Outputs the sequence of SQL statements to create a new empty valid auxiliary
+    database. This option can be specified as the only switch of the utility.
+    If also specifying a CRS object and the :option:`--output-id` option, the
+    definition of the object as SQL statements will be appended.
+
+.. option:: --list-crs [list-crs-filter]
+
+    .. versionadded:: 8.1
+
+    Outputs a list (authority name:code and CRS name) of the filtered CRSs from the database.
+    If no filter is provided all authority names and types of non deprecated CRSs are dumped.
+    list-crs-filter is a comma separated combination of: allow_deprecated,geodetic,geocentric,
+    geographic,geographic_2d,geographic_3d,vertical,projected,compound.
+    Affected by options :option:`--authority`, :option:`--area`, :option:`--bbox` and :option:`--spatial-test`
+
 .. option:: --3d
 
     .. versionadded:: 6.3
@@ -270,6 +306,26 @@ The following control parameters can appear in any order:
     component but not the other one, the one that has no vertical component is
     automatically promoted to a 3D version, where its vertical axis is the
     ellipsoidal height in metres, using the ellipsoid of the base geodetic CRS.
+
+.. option:: --output-id=AUTH:NAME
+
+    .. versionadded:: 8.1
+
+    Identifier to assign to the object (for SQL output).
+
+    It is strongly recommended that new objects should not be added in common
+    registries, such as ``EPSG``, ``ESRI``, ``IAU``, etc.
+    Users should use a custom authority name instead. If a new object should be
+    added to the official EPSG registry, users are invited to follow the
+    procedure explained at https://epsg.org/dataset-change-requests.html.
+
+    Combined with :option:`--dump-db-structure`, users can create
+    auxiliary databases, instead of directly modifying the main :file:`proj.db` database.
+    See the :ref:`example how to export to an auxiliary database <projinfo_aux_db_example>`.
+
+    Those auxiliary databases can be specified through
+    :cpp:func:`proj_context_set_database_path` or the :envvar:`PROJ_AUX_DB`
+    environment variable.
 
 .. option:: --c-ify
 
@@ -442,6 +498,103 @@ Output:
         }
     }
 
+.. _projinfo_aux_db_example:
+
+4. Exporting the SQL statements to insert a new CRS in an auxiliary database.
+
+.. code-block:: console
+
+        # Get the SQL statements for a custom CRS
+        projinfo "+proj=merc +lat_ts=5 +datum=WGS84 +type=crs +title=my_crs" --output-id HOBU:MY_CRS -o SQL -q > my_crs.sql
+        cat my_crs.sql
+
+        # Initialize an auxiliary database with the schema of the reference database
+        echo ".schema" | sqlite3 /path/to/proj.db | sqlite3 aux.db
+
+        # Append the content of the definition of HOBU:MY_CRS
+        sqlite3 aux.db < my_crs.db
+
+        # Check that everything works OK
+        projinfo --aux-db-path aux.db HOBU:MY_CRS
+
+or more simply:
+
+.. code-block:: console
+
+        # Create an auxiliary database with the definition of a custom CRS.
+        projinfo "+proj=merc +lat_ts=5 +datum=WGS84 +type=crs +title=my_crs" --output-id HOBU:MY_CRS --dump-db-structure | sqlite3 aux.db
+
+        # Check that everything works OK
+        projinfo --aux-db-path aux.db HOBU:MY_CRS
+
+Output:
+
+.. code-block:: sql
+
+    INSERT INTO geodetic_crs VALUES('HOBU','GEODETIC_CRS_MY_CRS','unknown','','geographic 2D','EPSG','6424','EPSG','6326',NULL,0);
+    INSERT INTO usage VALUES('HOBU','USAGE_GEODETIC_CRS_MY_CRS','geodetic_crs','HOBU','GEODETIC_CRS_MY_CRS','PROJ','EXTENT_UNKNOWN','PROJ','SCOPE_UNKNOWN');
+    INSERT INTO conversion VALUES('HOBU','CONVERSION_MY_CRS','unknown','','EPSG','9805','Mercator (variant B)','EPSG','8823','Latitude of 1st standard parallel',5,'EPSG','9122','EPSG','8802','Longitude of natural origin',0,'EPSG','9122','EPSG','8806','False easting',0,'EPSG','9001','EPSG','8807','False northing',0,'EPSG','9001',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);
+    INSERT INTO usage VALUES('HOBU','USAGE_CONVERSION_MY_CRS','conversion','HOBU','CONVERSION_MY_CRS','PROJ','EXTENT_UNKNOWN','PROJ','SCOPE_UNKNOWN');
+    INSERT INTO projected_crs VALUES('HOBU','MY_CRS','my_crs','','EPSG','4400','HOBU','GEODETIC_CRS_MY_CRS','HOBU','CONVERSION_MY_CRS',NULL,0);
+    INSERT INTO usage VALUES('HOBU','USAGE_PROJECTED_CRS_MY_CRS','projected_crs','HOBU','MY_CRS','PROJ','EXTENT_UNKNOWN','PROJ','SCOPE_UNKNOWN');
+
+::
+
+    PROJ.4 string:
+    +proj=merc +lat_ts=5 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs
+
+    WKT2:2019 string:
+    PROJCRS["my_crs",
+        BASEGEOGCRS["unknown",
+            ENSEMBLE["World Geodetic System 1984 ensemble",
+                MEMBER["World Geodetic System 1984 (Transit)"],
+                MEMBER["World Geodetic System 1984 (G730)"],
+                MEMBER["World Geodetic System 1984 (G873)"],
+                MEMBER["World Geodetic System 1984 (G1150)"],
+                MEMBER["World Geodetic System 1984 (G1674)"],
+                MEMBER["World Geodetic System 1984 (G1762)"],
+                ELLIPSOID["WGS 84",6378137,298.257223563,
+                    LENGTHUNIT["metre",1]],
+                ENSEMBLEACCURACY[2.0]],
+            PRIMEM["Greenwich",0,
+                ANGLEUNIT["degree",0.0174532925199433]],
+            ID["HOBU","GEODETIC_CRS_MY_CRS"]],
+        CONVERSION["unknown",
+            METHOD["Mercator (variant B)",
+                ID["EPSG",9805]],
+            PARAMETER["Latitude of 1st standard parallel",5,
+                ANGLEUNIT["degree",0.0174532925199433],
+                ID["EPSG",8823]],
+            PARAMETER["Longitude of natural origin",0,
+                ANGLEUNIT["degree",0.0174532925199433],
+                ID["EPSG",8802]],
+            PARAMETER["False easting",0,
+                LENGTHUNIT["metre",1],
+                ID["EPSG",8806]],
+            PARAMETER["False northing",0,
+                LENGTHUNIT["metre",1],
+                ID["EPSG",8807]]],
+        CS[Cartesian,2],
+            AXIS["(E)",east,
+                ORDER[1],
+                LENGTHUNIT["metre",1]],
+            AXIS["(N)",north,
+                ORDER[2],
+                LENGTHUNIT["metre",1]],
+        ID["HOBU","MY_CRS"]]
+
+5. Get the WKT representation of EPSG:25832 in the WKT1:GDAL output format and on a single line
+
+.. code-block:: console
+
+      projinfo -o WKT1:GDAL --single-line EPSG:25832
+
+Output:
+
+::
+
+    WKT1:GDAL string:
+    PROJCS["ETRS89 / UTM zone 32N",GEOGCS["ETRS89",DATUM["European_Terrestrial_Reference_System_1989",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6258"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4258"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",9],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","25832"]]
 
 .. only:: man
 
@@ -450,13 +603,4 @@ Output:
 
     **cs2cs(1)**, **cct(1)**, **geod(1)**, **gie(1)**, **proj(1)**, **projsync(1)**
 
-    Bugs
-    ****
-
-    A list of know bugs can be found at https://github.com/OSGeo/PROJ/issues
-    where new bug reports can be submitted to.
-
-    Home page
-    *********
-
-    https://proj.org/
+    .. include:: common_man.rst

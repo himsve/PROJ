@@ -6,7 +6,7 @@ TESTS = geodtest
 check_PROGRAMS = geodtest
 
 AM_CPPFLAGS =	-DPROJ_LIB=\"$(pkgdatadir)\" \
-		-DMUTEX_@MUTEX_SETTING@ -I$(top_srcdir)/include @SQLITE3_CFLAGS@ @TIFF_CFLAGS@ @TIFF_ENABLED_FLAGS@ @CURL_CFLAGS@ @CURL_ENABLED_FLAGS@
+		-DMUTEX_@MUTEX_SETTING@ -I$(top_srcdir)/include @SQLITE3_CFLAGS@ @TIFF_CFLAGS@ @TIFF_ENABLED_FLAGS@ @CURL_CFLAGS@ @CURL_ENABLED_FLAGS@ @PROJ_LIB_ENV_VAR_TRIED_LAST_FLAGS@
 AM_CXXFLAGS =    @CXX_WFLAGS@ @FLTO_FLAG@
 
 include_HEADERS = proj.h proj_experimental.h proj_constants.h geodesic.h \
@@ -50,7 +50,7 @@ geodtest_LDADD = libproj.la
 
 lib_LTLIBRARIES = libproj.la
 
-libproj_la_LDFLAGS = -no-undefined -version-info 21:0:2
+libproj_la_LDFLAGS = -no-undefined -version-info 23:0:1
 libproj_la_LIBADD = @SQLITE3_LIBS@ @TIFF_LIBS@ @CURL_LIBS@
 
 libproj_la_SOURCES = \
@@ -181,6 +181,7 @@ libproj_la_SOURCES = \
 	projections/putp6.cpp \
 	projections/qsc.cpp \
 	projections/robin.cpp \
+	projections/s2.cpp \
 	projections/sch.cpp \
 	projections/sts.cpp \
 	projections/urm5.cpp \
@@ -267,12 +268,12 @@ libproj_la_SOURCES = \
 # The sed hack is to please MSVC
 wkt1_parser:
 	bison --no-lines -d  -p pj_wkt1_ -o$(top_srcdir)/src/wkt1_generated_parser.c $(top_srcdir)/src/wkt1_grammar.y
-	sed "s/\*yyssp = yystate/\*yyssp = (yytype_int16)yystate/" < $(top_srcdir)/src/wkt1_generated_parser.c | sed "s/yyerrorlab:/#if 0\nyyerrorlab:/" | sed "s/yyerrlab1:/#endif\nyyerrlab1:/" | sed "s/for (yylen = 0; yystr\[yylen\]; yylen++)/for (yylen = 0; yystr \&\& yystr\[yylen\]; yylen++)/"  > $(top_srcdir)/src/wkt1_generated_parser.c.tmp
+	sed "s/\*yyssp = yystate/\*yyssp = (yytype_int16)yystate/" < $(top_srcdir)/src/wkt1_generated_parser.c | sed "s/yyerrorlab:/#if 0\nyyerrorlab:/" | sed "s/yyerrlab1:/#endif\nyyerrlab1:/" | sed "s/for (yylen = 0; yystr\[yylen\]; yylen++)/for (yylen = 0; yystr \&\& yystr\[yylen\]; yylen++)/" | sed "s/return yystpcpy (yyres, yystr) - yyres;/return (YYPTRDIFF_T)(yystpcpy (yyres, yystr) - yyres);/" | sed "s/YYPTRDIFF_T yysize = yyssp - yyss + 1;/YYPTRDIFF_T yysize = (YYPTRDIFF_T)(yyssp - yyss + 1);/" > $(top_srcdir)/src/wkt1_generated_parser.c.tmp
 	mv $(top_srcdir)/src/wkt1_generated_parser.c.tmp $(top_srcdir)/src/wkt1_generated_parser.c
 
 wkt2_parser:
 	bison --no-lines -d  -p pj_wkt2_ -o$(top_srcdir)/src/wkt2_generated_parser.c $(top_srcdir)/src/wkt2_grammar.y
-	sed "s/\*yyssp = yystate/\*yyssp = (yytype_int16)yystate/" < $(top_srcdir)/src/wkt2_generated_parser.c | sed "s/yyerrorlab:/#if 0\nyyerrorlab:/" | sed "s/yyerrlab1:/#endif\nyyerrlab1:/" | sed "s/for (yylen = 0; yystr\[yylen\]; yylen++)/for (yylen = 0; yystr \&\& yystr\[yylen\]; yylen++)/"  > $(top_srcdir)/src/wkt2_generated_parser.c.tmp
+	sed "s/\*yyssp = yystate/\*yyssp = (yytype_int16)yystate/" < $(top_srcdir)/src/wkt2_generated_parser.c | sed "s/yyerrorlab:/#if 0\nyyerrorlab:/" | sed "s/yyerrlab1:/#endif\nyyerrlab1:/" | sed "s/for (yylen = 0; yystr\[yylen\]; yylen++)/for (yylen = 0; yystr \&\& yystr\[yylen\]; yylen++)/"| sed "s/return yystpcpy (yyres, yystr) - yyres;/return (YYPTRDIFF_T)(yystpcpy (yyres, yystr) - yyres);/" | sed "s/YYPTRDIFF_T yysize = yyssp - yyss + 1;/YYPTRDIFF_T yysize = (YYPTRDIFF_T)(yyssp - yyss + 1);/"> $(top_srcdir)/src/wkt2_generated_parser.c.tmp
 	mv $(top_srcdir)/src/wkt2_generated_parser.c.tmp $(top_srcdir)/src/wkt2_generated_parser.c
 
 

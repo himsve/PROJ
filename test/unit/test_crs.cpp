@@ -1002,6 +1002,10 @@ TEST(crs, EPSG_32661_projected_north_pole_north_east) {
     EXPECT_EQ(
         opNormalized->exportToPROJString(PROJStringFormatter::create().get()),
         proj_string_normalized);
+
+    EXPECT_EQ(opNormalized->sourceCRS()->domains().size(), 1U);
+    EXPECT_EQ(opNormalized->sourceCRS()->remarks(),
+              "Axis order reversed compared to EPSG:4326");
 }
 
 // ---------------------------------------------------------------------------
@@ -4226,7 +4230,7 @@ TEST(crs, compoundCRS_identify_db) {
     // Identify a CompoundCRS whose horizontal and vertical parts are known
     // but not the composition.
     {
-        auto obj = createFromUserInput("EPSG:4326+3855", dbContext);
+        auto obj = createFromUserInput("EPSG:4326+5703", dbContext);
         auto sourceCRS = nn_dynamic_pointer_cast<CompoundCRS>(obj);
         ASSERT_TRUE(sourceCRS != nullptr);
         auto wkt = sourceCRS->exportToWKT(
@@ -4242,7 +4246,7 @@ TEST(crs, compoundCRS_identify_db) {
         EXPECT_EQ(res.front().second, 100);
         const auto &components = res.front().first->componentReferenceSystems();
         EXPECT_EQ(components[0]->getEPSGCode(), 4326);
-        EXPECT_EQ(components[1]->getEPSGCode(), 3855);
+        EXPECT_EQ(components[1]->getEPSGCode(), 5703);
     }
 }
 
@@ -4642,9 +4646,10 @@ TEST(crs, boundCRS_identify_db) {
         auto res = crs->identify(factoryEPSG);
         ASSERT_EQ(res.size(), 1U);
         EXPECT_EQ(res.front().second, 25);
-        auto wkt = crs->exportToWKT(
-            WKTFormatter::create(WKTFormatter::Convention::WKT1_GDAL).get());
-        EXPECT_TRUE(wkt.find("32122") != std::string::npos) << wkt;
+        auto boundCRS = dynamic_cast<const BoundCRS *>(res.front().first.get());
+        ASSERT_TRUE(boundCRS != nullptr);
+        EXPECT_EQ(boundCRS->baseCRS()->getEPSGCode(), 32122);
+        EXPECT_EQ(boundCRS->transformation()->method()->getEPSGCode(), 9603);
     }
 
     {
@@ -4660,6 +4665,25 @@ TEST(crs, boundCRS_identify_db) {
         ASSERT_TRUE(boundCRS != nullptr);
         EXPECT_EQ(boundCRS->baseCRS()->getEPSGCode(), 3148);
         EXPECT_EQ(res.front().second, 70);
+    }
+
+    {
+        // Identify a WKT with datum WGS84 and TOWGS84
+        auto obj = WKTParser().attachDatabaseContext(dbContext).createFromWKT(
+            "GEOGCS[\"WGS84 Coordinate System\",DATUM[\"WGS 1984\","
+            "SPHEROID[\"WGS 1984\",6378137,298.257223563],"
+            "TOWGS84[0,0,0,0,0,0,0],AUTHORITY[\"EPSG\",\"6326\"]],"
+            "PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433],"
+            "AUTHORITY[\"EPSG\",\"4326\"]]");
+        auto crs = nn_dynamic_pointer_cast<BoundCRS>(obj);
+        ASSERT_TRUE(crs != nullptr);
+        auto res = crs->identify(factoryEPSG);
+        ASSERT_EQ(res.size(), 1U);
+        EXPECT_EQ(res.front().second, 100);
+        auto boundCRS = dynamic_cast<const BoundCRS *>(res.front().first.get());
+        ASSERT_TRUE(boundCRS != nullptr);
+        EXPECT_EQ(boundCRS->baseCRS()->getEPSGCode(), 4326);
+        EXPECT_EQ(boundCRS->transformation()->method()->getEPSGCode(), 9606);
     }
 }
 
@@ -5511,8 +5535,9 @@ static ParametricCSNNPtr createParametricCS() {
         PropertyMap(),
         CoordinateSystemAxis::create(
             PropertyMap().set(IdentifiedObject::NAME_KEY, "pressure"), "hPa",
-            AxisDirection::UP, UnitOfMeasure("HectoPascal", 100,
-                                             UnitOfMeasure::Type::PARAMETRIC)));
+            AxisDirection::UP,
+            UnitOfMeasure("HectoPascal", 100,
+                          UnitOfMeasure::Type::PARAMETRIC)));
 }
 
 // ---------------------------------------------------------------------------
@@ -5611,6 +5636,32 @@ TEST(crs, DerivedVerticalCRS_WKT1) {
         createDerivedVerticalCRS()->exportToWKT(
             WKTFormatter::create(WKTFormatter::Convention::WKT1_GDAL).get()),
         FormattingException);
+}
+
+// ---------------------------------------------------------------------------
+
+TEST(crs, DerivedVerticalCRS_WKT1_when_simple_derivation) {
+
+    auto derivingConversion =
+        Conversion::createChangeVerticalUnit(PropertyMap().set(
+            IdentifiedObject::NAME_KEY, "Vertical Axis Unit Conversion"));
+
+    auto crs = DerivedVerticalCRS::create(
+        PropertyMap().set(IdentifiedObject::NAME_KEY, "Derived vertCRS"),
+        createVerticalCRS(), derivingConversion,
+        VerticalCS::createGravityRelatedHeight(UnitOfMeasure::FOOT));
+
+    auto expected = "VERT_CS[\"Derived vertCRS\",\n"
+                    "    VERT_DATUM[\"Ordnance Datum Newlyn\",2005,\n"
+                    "        AUTHORITY[\"EPSG\",\"5101\"]],\n"
+                    "    UNIT[\"foot\",0.3048,\n"
+                    "        AUTHORITY[\"EPSG\",\"9002\"]],\n"
+                    "    AXIS[\"Gravity-related height\",UP]]";
+
+    EXPECT_EQ(
+        crs->exportToWKT(
+            WKTFormatter::create(WKTFormatter::Convention::WKT1_GDAL).get()),
+        expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -6351,6 +6402,32 @@ TEST(crs, promoteTo3D_and_demoteTo2D) {
         auto demoted = compoundCRS->demoteTo2D(std::string(), nullptr);
         EXPECT_TRUE(dynamic_cast<const ProjectedCRS *>(demoted.get()) !=
                     nullptr);
+    }
+
+    {
+        auto crs = createDerivedGeographicCRS();
+        auto crs3D = crs->promoteTo3D(std::string(), dbContext);
+        auto crs3DAsDerivedGeog =
+            nn_dynamic_pointer_cast<DerivedGeographicCRS>(crs3D);
+        ASSERT_TRUE(crs3DAsDerivedGeog != nullptr);
+        EXPECT_EQ(crs3DAsDerivedGeog->baseCRS()
+                      ->coordinateSystem()
+                      ->axisList()
+                      .size(),
+                  3U);
+        EXPECT_EQ(crs3DAsDerivedGeog->coordinateSystem()->axisList().size(),
+                  3U);
+        EXPECT_TRUE(crs3DAsDerivedGeog->promoteTo3D(std::string(), nullptr)
+                        ->isEquivalentTo(crs3DAsDerivedGeog.get()));
+
+        auto demoted = crs3DAsDerivedGeog->demoteTo2D(std::string(), dbContext);
+        EXPECT_EQ(demoted->baseCRS()->coordinateSystem()->axisList().size(),
+                  2U);
+        EXPECT_EQ(demoted->coordinateSystem()->axisList().size(), 2U);
+        EXPECT_TRUE(demoted->isEquivalentTo(
+            crs.get(), IComparable::Criterion::EQUIVALENT));
+        EXPECT_TRUE(demoted->demoteTo2D(std::string(), nullptr)
+                        ->isEquivalentTo(demoted.get()));
     }
 }
 
