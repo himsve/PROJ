@@ -3121,7 +3121,8 @@ void CoordinateOperationFactory::Private::createOperationsFromProj4Ext(
     projFormatter->setLegacyCRSToCRSContext(true);
     projFormatter->startInversion();
     sourceProjExportable->_exportToPROJString(projFormatter.get());
-    auto geogSrc = dynamic_cast<const crs::GeographicCRS *>(sourceCRS.get());
+    auto geogSrc = dynamic_cast<const crs::GeographicCRS *>(
+        boundSrc ? boundSrc->baseCRS().get() : sourceCRS.get());
     if (geogSrc) {
         auto tmpFormatter = io::PROJStringFormatter::create();
         geogSrc->addAngularUnitConvertAndAxisSwap(tmpFormatter.get());
@@ -3131,7 +3132,8 @@ void CoordinateOperationFactory::Private::createOperationsFromProj4Ext(
     projFormatter->stopInversion();
 
     targetProjExportable->_exportToPROJString(projFormatter.get());
-    auto geogDst = dynamic_cast<const crs::GeographicCRS *>(targetCRS.get());
+    auto geogDst = dynamic_cast<const crs::GeographicCRS *>(
+        boundDst ? boundDst->baseCRS().get() : targetCRS.get());
     if (geogDst) {
         auto tmpFormatter = io::PROJStringFormatter::create();
         geogDst->addAngularUnitConvertAndAxisSwap(tmpFormatter.get());
@@ -3476,7 +3478,7 @@ CoordinateOperationFactory::Private::createOperationsGeogToVertFromGeoid(
                               vertDst->datum(), vertDst->datumEnsemble(),
                               cs::VerticalCS::createGravityRelatedHeight(
                                   common::UnitOfMeasure::METRE)));
-            const auto properties = util::PropertyMap().set(
+            auto properties = util::PropertyMap().set(
                 common::IdentifiedObject::NAME_KEY,
                 buildOpName("Transformation", vertCRSMetre, geogSrcCRS));
 
@@ -3485,14 +3487,21 @@ CoordinateOperationFactory::Private::createOperationsGeogToVertFromGeoid(
             std::vector<metadata::PositionalAccuracyNNPtr> accuracies;
             const auto &modelAccuracies =
                 model->coordinateOperationAccuracies();
+            std::vector<CoordinateOperationNNPtr> transformationsForGrid;
+            double accuracy = -1;
+            size_t idx = static_cast<size_t>(-1);
             if (modelAccuracies.empty()) {
                 if (authFactory) {
-                    const auto transformationsForGrid =
+                    transformationsForGrid =
                         io::DatabaseContext::getTransformationsForGridName(
                             authFactory->databaseContext(), projFilename);
-                    double accuracy = -1;
-                    for (const auto &transf : transformationsForGrid) {
-                        accuracy = std::max(accuracy, getAccuracy(transf));
+                    for (size_t i = 0; i < transformationsForGrid.size(); ++i) {
+                        const auto &transf = transformationsForGrid[i];
+                        const double transfAcc = getAccuracy(transf);
+                        if (transfAcc - accuracy > 1e-10) {
+                            accuracy = transfAcc;
+                            idx = i;
+                        }
                     }
                     if (accuracy >= 0) {
                         accuracies.emplace_back(
@@ -3500,6 +3509,31 @@ CoordinateOperationFactory::Private::createOperationsGeogToVertFromGeoid(
                                 toString(accuracy)));
                     }
                 }
+            }
+
+            // Set extent
+            bool dummy = false;
+            // Use in priority the one of the geoid model transformation
+            auto extent = getExtent(model, true, dummy);
+            // Otherwise fallback to the extent of a transformation using
+            // the grid.
+            if (extent == nullptr && authFactory != nullptr) {
+                if (transformationsForGrid.empty()) {
+                    transformationsForGrid =
+                        io::DatabaseContext::getTransformationsForGridName(
+                            authFactory->databaseContext(), projFilename);
+                }
+                if (idx != static_cast<size_t>(-1)) {
+                    const auto &transf = transformationsForGrid[idx];
+                    extent = getExtent(transf, true, dummy);
+                } else if (!transformationsForGrid.empty()) {
+                    const auto &transf = transformationsForGrid.front();
+                    extent = getExtent(transf, true, dummy);
+                }
+            }
+            if (extent) {
+                properties.set(common::ObjectUsage::DOMAIN_OF_VALIDITY_KEY,
+                               NN_NO_CHECK(extent));
             }
 
             return Transformation::createGravityRelatedHeightToGeographic3D(
@@ -5314,6 +5348,12 @@ CoordinateOperationFactory::createOperations(
     metadata::ExtentPtr targetCRSExtent;
     auto l_resolvedTargetCRS =
         crs::CRS::getResolvedCRS(l_targetCRS, authFactory, targetCRSExtent);
+    if (context->getSourceAndTargetCRSExtentUse() ==
+        CoordinateOperationContext::SourceTargetCRSExtentUse::NONE) {
+        // Make sure *not* to use CRS extent if requested to ignore it
+        sourceCRSExtent.reset();
+        targetCRSExtent.reset();
+    }
     Private::Context contextPrivate(sourceCRSExtent, targetCRSExtent, context);
 
     if (context->getSourceAndTargetCRSExtentUse() ==

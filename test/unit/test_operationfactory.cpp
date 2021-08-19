@@ -2123,6 +2123,47 @@ TEST(
 
 // ---------------------------------------------------------------------------
 
+TEST(operation, projCRS_to_geogCRS_crs_extent_use_none) {
+    auto authFactory =
+        AuthorityFactory::create(DatabaseContext::create(), "EPSG");
+    {
+        auto ctxt =
+            CoordinateOperationContext::create(authFactory, nullptr, 0.0);
+        auto list = CoordinateOperationFactory::create()->createOperations(
+            authFactory->createCoordinateReferenceSystem("23031"), // ED50 UTM31
+            authFactory->createCoordinateReferenceSystem("4326"), ctxt);
+        bool found_EPSG_15964 = false;
+        for (const auto &op : list) {
+            if (op->nameStr().find("ED50 to WGS 84 (42)") !=
+                std::string::npos) {
+                found_EPSG_15964 = true;
+            }
+        }
+        // not expected since doesn't intersect EPSG:23031 area of use
+        EXPECT_FALSE(found_EPSG_15964);
+    }
+    {
+        auto ctxt =
+            CoordinateOperationContext::create(authFactory, nullptr, 0.0);
+        // Ignore source and target CRS extent
+        ctxt->setSourceAndTargetCRSExtentUse(
+            CoordinateOperationContext::SourceTargetCRSExtentUse::NONE);
+        auto list = CoordinateOperationFactory::create()->createOperations(
+            authFactory->createCoordinateReferenceSystem("23031"), // ED50 UTM31
+            authFactory->createCoordinateReferenceSystem("4326"), ctxt);
+        bool found_EPSG_15964 = false;
+        for (const auto &op : list) {
+            if (op->nameStr().find("ED50 to WGS 84 (42)") !=
+                std::string::npos) {
+                found_EPSG_15964 = true;
+            }
+        }
+        EXPECT_TRUE(found_EPSG_15964);
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 TEST(operation, projCRS_to_projCRS_north_pole_inverted_axis) {
 
     auto authFactory =
@@ -2181,7 +2222,7 @@ TEST(operation, projCRS_to_projCRS_through_geog3D) {
               "+step +proj=cart +ellps=WGS84 "
               "+step +proj=helmert +x=-0.16959 +y=0.35312 +z=0.51846 "
               "+rx=-0.03385 +ry=0.16325 +rz=-0.03446 +s=0.03693 "
-              "+convention=position_vector "
+              "+convention=coordinate_frame "
               "+step +inv +proj=cart +ellps=GRS80 "
               "+step +proj=pop +v_3 "
               "+step +proj=tmerc +lat_0=0 +lon_0=-84 +k=0.9999 +x_0=500000 "
@@ -6062,6 +6103,30 @@ TEST(operation, createOperation_fallback_to_proj4_strings) {
               "+proj=pipeline +step +proj=axisswap +order=2,1 "
               "+step +proj=unitconvert +xy_in=deg +xy_out=rad "
               "+step +proj=longlat +geoc +datum=WGS84 "
+              "+step +proj=unitconvert +xy_in=rad +xy_out=deg");
+}
+
+// ---------------------------------------------------------------------------
+
+TEST(operation, createOperation_fallback_to_proj4_strings_bound_of_geog) {
+    auto objSrc = PROJStringParser().createFromPROJString(
+        "+proj=longlat +geoc +ellps=GRS80 +towgs84=0,0,0 +type=crs");
+    auto src = nn_dynamic_pointer_cast<BoundCRS>(objSrc);
+    ASSERT_TRUE(src != nullptr);
+
+    auto objDest = PROJStringParser().createFromPROJString(
+        "+proj=longlat +geoc +ellps=clrk66 +towgs84=0,0,0 +type=crs");
+    auto dest = nn_dynamic_pointer_cast<BoundCRS>(objDest);
+    ASSERT_TRUE(dest != nullptr);
+
+    auto op = CoordinateOperationFactory::create()->createOperation(
+        NN_CHECK_ASSERT(src), NN_CHECK_ASSERT(dest));
+    ASSERT_TRUE(op != nullptr);
+    EXPECT_EQ(op->exportToPROJString(PROJStringFormatter::create().get()),
+              "+proj=pipeline "
+              "+step +proj=unitconvert +xy_in=deg +xy_out=rad "
+              "+step +inv +proj=longlat +geoc +ellps=GRS80 +towgs84=0,0,0 "
+              "+step +proj=longlat +geoc +ellps=clrk66 +towgs84=0,0,0 "
               "+step +proj=unitconvert +xy_in=rad +xy_out=deg");
 }
 

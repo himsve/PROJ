@@ -171,7 +171,7 @@ extern "C" {
 
 /* The version numbers should be updated with every release! **/
 #define PROJ_VERSION_MAJOR 8
-#define PROJ_VERSION_MINOR 1
+#define PROJ_VERSION_MINOR 2
 #define PROJ_VERSION_PATCH 0
 
 /* Note: the following 3 defines have been introduced in PROJ 8.0.1 */
@@ -559,7 +559,7 @@ PJ PROJ_DLL *proj_create_crs_to_crs_from_pj(PJ_CONTEXT *ctx,
                                             const PJ *target_crs,
                                             PJ_AREA *area,
                                             const char* const *options);
-/*! @endcond Doxygen_Suppress */
+/*! @endcond */
 PJ PROJ_DLL *proj_normalize_for_visualization(PJ_CONTEXT *ctx, const PJ* obj);
 /*! @cond Doxygen_Suppress */
 void PROJ_DLL proj_assign_context(PJ* pj, PJ_CONTEXT* ctx);

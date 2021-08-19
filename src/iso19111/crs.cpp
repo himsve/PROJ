@@ -46,6 +46,8 @@
 #include "proj/internal/internal.hpp"
 #include "proj/internal/io_internal.hpp"
 
+#include "operation/oputils.hpp"
+
 #include "proj_constants.h"
 #include "proj_json_streaming_writer.hpp"
 
@@ -823,6 +825,64 @@ bool CRS::mustAxisOrderBeSwitchedForVisualization() const {
 
 //! @cond Doxygen_Suppress
 
+void CRS::setProperties(
+    const util::PropertyMap &properties) // throw(InvalidValueTypeException)
+{
+    std::string l_remarks;
+    std::string extensionProj4;
+    properties.getStringValue(IdentifiedObject::REMARKS_KEY, l_remarks);
+    properties.getStringValue("EXTENSION_PROJ4", extensionProj4);
+
+    const char *PROJ_CRS_STRING_PREFIX = "PROJ CRS string: ";
+    const char *PROJ_CRS_STRING_SUFFIX = ". ";
+    const auto beginOfProjStringPos = l_remarks.find(PROJ_CRS_STRING_PREFIX);
+    if (beginOfProjStringPos == std::string::npos && extensionProj4.empty()) {
+        ObjectUsage::setProperties(properties);
+        return;
+    }
+
+    util::PropertyMap newProperties(properties);
+
+    // Parse remarks and extract EXTENSION_PROJ4 from it
+    if (extensionProj4.empty()) {
+        if (beginOfProjStringPos != std::string::npos) {
+            const auto endOfProjStringPos =
+                l_remarks.find(PROJ_CRS_STRING_SUFFIX, beginOfProjStringPos);
+            if (endOfProjStringPos == std::string::npos) {
+                extensionProj4 = l_remarks.substr(
+                    beginOfProjStringPos + strlen(PROJ_CRS_STRING_PREFIX));
+            } else {
+                extensionProj4 = l_remarks.substr(
+                    beginOfProjStringPos + strlen(PROJ_CRS_STRING_PREFIX),
+                    endOfProjStringPos - beginOfProjStringPos -
+                        strlen(PROJ_CRS_STRING_PREFIX));
+            }
+        }
+    }
+
+    if (!extensionProj4.empty()) {
+        if (beginOfProjStringPos == std::string::npos) {
+            // Add EXTENSION_PROJ4 to remarks
+            l_remarks =
+                PROJ_CRS_STRING_PREFIX + extensionProj4 +
+                (l_remarks.empty() ? std::string()
+                                   : PROJ_CRS_STRING_SUFFIX + l_remarks);
+        }
+    }
+
+    newProperties.set(IdentifiedObject::REMARKS_KEY, l_remarks);
+
+    ObjectUsage::setProperties(newProperties);
+
+    d->extensionProj4_ = extensionProj4;
+}
+
+//! @endcond
+
+// ---------------------------------------------------------------------------
+
+//! @cond Doxygen_Suppress
+
 CRSNNPtr CRS::normalizeForVisualization() const {
 
     const auto createProperties = [this](const std::string &newName =
@@ -1077,8 +1137,24 @@ CRSNNPtr CRS::promoteTo3D(const std::string &newName,
         return props;
     };
 
-    const auto geogCRS = dynamic_cast<const GeographicCRS *>(this);
-    if (geogCRS) {
+    if (auto derivedGeogCRS =
+            dynamic_cast<const DerivedGeographicCRS *>(this)) {
+        const auto &axisList = derivedGeogCRS->coordinateSystem()->axisList();
+        if (axisList.size() == 2) {
+            auto cs = cs::EllipsoidalCS::create(
+                util::PropertyMap(), axisList[0], axisList[1],
+                verticalAxisIfNotAlreadyPresent);
+            auto baseGeog3DCRS = util::nn_dynamic_pointer_cast<GeodeticCRS>(
+                derivedGeogCRS->baseCRS()->promoteTo3D(
+                    std::string(), dbContext, verticalAxisIfNotAlreadyPresent));
+            return util::nn_static_pointer_cast<CRS>(
+                DerivedGeographicCRS::create(
+                    createProperties(), NN_CHECK_THROW(baseGeog3DCRS),
+                    derivedGeogCRS->derivingConversion(), cs));
+        }
+    }
+
+    else if (auto geogCRS = dynamic_cast<const GeographicCRS *>(this)) {
         const auto &axisList = geogCRS->coordinateSystem()->axisList();
         if (axisList.size() == 2) {
             const auto &l_identifiers = identifiers();
@@ -1118,8 +1194,7 @@ CRSNNPtr CRS::promoteTo3D(const std::string &newName,
         }
     }
 
-    const auto projCRS = dynamic_cast<const ProjectedCRS *>(this);
-    if (projCRS) {
+    else if (auto projCRS = dynamic_cast<const ProjectedCRS *>(this)) {
         const auto &axisList = projCRS->coordinateSystem()->axisList();
         if (axisList.size() == 2) {
             auto base3DCRS =
@@ -1135,8 +1210,7 @@ CRSNNPtr CRS::promoteTo3D(const std::string &newName,
         }
     }
 
-    const auto boundCRS = dynamic_cast<const BoundCRS *>(this);
-    if (boundCRS) {
+    else if (auto boundCRS = dynamic_cast<const BoundCRS *>(this)) {
         auto base3DCRS = boundCRS->baseCRS()->promoteTo3D(
             newName, dbContext, verticalAxisIfNotAlreadyPresent);
         auto transf = boundCRS->transformation();
@@ -1172,18 +1246,21 @@ CRSNNPtr CRS::promoteTo3D(const std::string &newName,
  */
 CRSNNPtr CRS::demoteTo2D(const std::string &newName,
                          const io::DatabaseContextPtr &dbContext) const {
-    const auto geogCRS = dynamic_cast<const GeographicCRS *>(this);
-    if (geogCRS) {
+
+    if (auto derivedGeogCRS =
+            dynamic_cast<const DerivedGeographicCRS *>(this)) {
+        return derivedGeogCRS->demoteTo2D(newName, dbContext);
+    }
+
+    else if (auto geogCRS = dynamic_cast<const GeographicCRS *>(this)) {
         return geogCRS->demoteTo2D(newName, dbContext);
     }
 
-    const auto projCRS = dynamic_cast<const ProjectedCRS *>(this);
-    if (projCRS) {
+    else if (auto projCRS = dynamic_cast<const ProjectedCRS *>(this)) {
         return projCRS->demoteTo2D(newName, dbContext);
     }
 
-    const auto boundCRS = dynamic_cast<const BoundCRS *>(this);
-    if (boundCRS) {
+    else if (auto boundCRS = dynamic_cast<const BoundCRS *>(this)) {
         auto base2DCRS = boundCRS->baseCRS()->demoteTo2D(newName, dbContext);
         auto transf = boundCRS->transformation();
         try {
@@ -1197,8 +1274,7 @@ CRSNNPtr CRS::demoteTo2D(const std::string &newName,
         }
     }
 
-    const auto compoundCRS = dynamic_cast<const CompoundCRS *>(this);
-    if (compoundCRS) {
+    else if (auto compoundCRS = dynamic_cast<const CompoundCRS *>(this)) {
         const auto &components = compoundCRS->componentReferenceSystems();
         if (components.size() >= 2) {
             return components[0];
@@ -1592,8 +1668,6 @@ GeodeticCRS::create(const util::PropertyMap &properties,
         GeodeticCRS::nn_make_shared<GeodeticCRS>(datum, datumEnsemble, cs));
     crs->assignSelf(crs);
     crs->setProperties(properties);
-    properties.getStringValue("EXTENSION_PROJ4",
-                              crs->CRS::getPrivate()->extensionProj4_);
 
     return crs;
 }
@@ -1639,8 +1713,7 @@ GeodeticCRS::create(const util::PropertyMap &properties,
         GeodeticCRS::nn_make_shared<GeodeticCRS>(datum, datumEnsemble, cs));
     crs->assignSelf(crs);
     crs->setProperties(properties);
-    properties.getStringValue("EXTENSION_PROJ4",
-                              crs->CRS::getPrivate()->extensionProj4_);
+
     return crs;
 }
 
@@ -2556,8 +2629,6 @@ GeographicCRS::create(const util::PropertyMap &properties,
         GeographicCRS::nn_make_shared<GeographicCRS>(datum, datumEnsemble, cs));
     crs->assignSelf(crs);
     crs->setProperties(properties);
-    properties.getStringValue("EXTENSION_PROJ4",
-                              crs->CRS::getPrivate()->extensionProj4_);
     crs->CRS::getPrivate()->setImplicitCS(properties);
     return crs;
 }
@@ -4031,8 +4102,6 @@ ProjectedCRS::create(const util::PropertyMap &properties,
     crs->assignSelf(crs);
     crs->setProperties(properties);
     crs->setDerivingConversionCRS();
-    properties.getStringValue("EXTENSION_PROJ4",
-                              crs->CRS::getPrivate()->extensionProj4_);
     crs->CRS::getPrivate()->setImplicitCS(properties);
     return crs;
 }
@@ -5519,7 +5588,12 @@ BoundCRS::_identify(const io::AuthorityFactoryPtr &authorityFactory) const {
                     auto opNormalized = op->normalizeForVisualization();
                     std::string opTransfPROJString;
                     bool opTransfPROJStringValid = false;
-                    if (op->nameStr().find("Ballpark geographic") == 0) {
+                    const auto &opName = op->nameStr();
+                    if (starts_with(
+                            opName,
+                            operation::BALLPARK_GEOCENTRIC_TRANSLATION) ||
+                        starts_with(opName,
+                                    operation::NULL_GEOGRAPHIC_OFFSET)) {
                         if (refIsNullTransform) {
                             res.emplace_back(create(candidateBaseCRS,
                                                     d->hubCRS_,
@@ -5887,6 +5961,38 @@ bool DerivedGeographicCRS::_isEquivalentTo(
     auto otherDerivedCRS = dynamic_cast<const DerivedGeographicCRS *>(other);
     return otherDerivedCRS != nullptr &&
            DerivedCRS::_isEquivalentTo(other, criterion, dbContext);
+}
+
+// ---------------------------------------------------------------------------
+
+/** \brief Return a variant of this CRS "demoted" to a 2D one, if not already
+ * the case.
+ *
+ *
+ * @param newName Name of the new CRS. If empty, nameStr() will be used.
+ * @param dbContext Database context to look for potentially already registered
+ *                  2D CRS. May be nullptr.
+ * @return a new CRS demoted to 2D, or the current one if already 2D or not
+ * applicable.
+ * @since 8.1.1
+ */
+DerivedGeographicCRSNNPtr DerivedGeographicCRS::demoteTo2D(
+    const std::string &newName, const io::DatabaseContextPtr &dbContext) const {
+
+    const auto &axisList = coordinateSystem()->axisList();
+    if (axisList.size() == 3) {
+        auto cs = cs::EllipsoidalCS::create(util::PropertyMap(), axisList[0],
+                                            axisList[1]);
+        auto baseGeog2DCRS = util::nn_dynamic_pointer_cast<GeodeticCRS>(
+            baseCRS()->demoteTo2D(std::string(), dbContext));
+        return DerivedGeographicCRS::create(
+            util::PropertyMap().set(common::IdentifiedObject::NAME_KEY,
+                                    !newName.empty() ? newName : nameStr()),
+            NN_CHECK_THROW(baseGeog2DCRS), derivingConversion(), cs);
+    }
+
+    return NN_NO_CHECK(std::dynamic_pointer_cast<DerivedGeographicCRS>(
+        shared_from_this().as_nullable()));
 }
 
 // ---------------------------------------------------------------------------
