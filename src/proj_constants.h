@@ -240,6 +240,8 @@
 
 #define PROJ_WKT2_NAME_METHOD_POLE_ROTATION_GRIB_CONVENTION "Pole rotation (GRIB convention)"
 
+#define PROJ_WKT2_NAME_METHOD_POLE_ROTATION_NETCDF_CF_CONVENTION "Pole rotation (netCDF CF convention)"
+
 #define EPSG_CODE_METHOD_COLOMBIA_URBAN 1052
 #define EPSG_NAME_METHOD_COLOMBIA_URBAN "Colombia Urban"
 
@@ -514,6 +516,15 @@
 #define PROJ_WKT2_NAME_PARAMETER_AXIS_ROTATION_GRIB_CONVENTION \
     "Axis rotation (GRIB convention)"
 
+#define PROJ_WKT2_NAME_PARAMETER_GRID_NORTH_POLE_LATITUDE_NETCDF_CONVENTION \
+    "Grid north pole latitude (netCDF CF convention)"
+
+#define PROJ_WKT2_NAME_PARAMETER_GRID_NORTH_POLE_LONGITUDE_NETCDF_CONVENTION \
+    "Grid north pole longitude (netCDF CF convention)"
+
+#define PROJ_WKT2_NAME_PARAMETER_NORTH_POLE_GRID_LONGITUDE_NETCDF_CONVENTION \
+    "North pole grid longitude (netCDF CF convention)"
+
 /* ------------------------------------------------------------------------ */
 
 #define EPSG_CODE_METHOD_NTV1 9614
@@ -682,5 +693,9 @@
 #define EPSG_NAME_METHOD_GEOGRAPHIC_TOPOCENTRIC "Geographic/topocentric conversions"
 #define EPSG_CODE_METHOD_GEOGRAPHIC_TOPOCENTRIC 9837
 
+/* ------------------------------------------------------------------------ */
+
+#define PROJ_WKT2_NAME_METHOD_GEOGRAPHIC_GEOCENTRIC_LATITUDE                   \
+    "Geographic latitude / Geocentric latitude"
 
 #endif /* PROJ_CONSTANTS_INCLUDED */

@@ -279,6 +279,7 @@ set(HEADERS_LIBPROJ
   proj.h
   proj_experimental.h
   proj_constants.h
+  proj_symbol_rename.h
   geodesic.h
 )
 
@@ -393,7 +394,7 @@ if(UNIX)
     target_link_libraries(proj PRIVATE -lm)
   endif()
   find_library(DL_LIB dl)
-  if(M_LIB)
+  if(DL_LIB)
     target_link_libraries(proj PRIVATE -ldl)
   endif()
 endif()

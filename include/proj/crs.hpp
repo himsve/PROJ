@@ -270,6 +270,8 @@ class PROJ_GCC_DLL GeodeticCRS : virtual public SingleCRS,
 
     PROJ_DLL bool isGeocentric() PROJ_PURE_DECL;
 
+    PROJ_DLL bool isSphericalPlanetocentric() PROJ_PURE_DECL;
+
     PROJ_DLL static GeodeticCRSNNPtr
     create(const util::PropertyMap &properties,
            const datum::GeodeticReferenceFrameNNPtr &datum,
@@ -307,6 +309,9 @@ class PROJ_GCC_DLL GeodeticCRS : virtual public SingleCRS,
 
     PROJ_INTERNAL void addGeocentricUnitConversionIntoPROJString(
         io::PROJStringFormatter *formatter) const;
+
+    PROJ_INTERNAL void
+    addAngularUnitConvertAndAxisSwap(io::PROJStringFormatter *formatter) const;
 
     PROJ_INTERNAL void _exportToWKT(io::WKTFormatter *formatter)
         const override; // throw(io::FormattingException)
@@ -400,12 +405,10 @@ class PROJ_GCC_DLL GeographicCRS : public GeodeticCRS {
 
     PROJ_PRIVATE :
         //! @cond Doxygen_Suppress
-        PROJ_INTERNAL void
-        addAngularUnitConvertAndAxisSwap(
-            io::PROJStringFormatter *formatter) const;
 
-    PROJ_INTERNAL void _exportToPROJString(io::PROJStringFormatter *formatter)
-        const override; // throw(FormattingException)
+        PROJ_INTERNAL void
+        _exportToPROJString(io::PROJStringFormatter *formatter)
+            const override; // throw(FormattingException)
 
     PROJ_INTERNAL void _exportToJSON(io::JSONFormatter *formatter)
         const override; // throw(FormattingException)
@@ -1009,6 +1012,11 @@ class PROJ_GCC_DLL BoundCRS final : public CRS,
     PROJ_INTERNAL void _exportToWKT(io::WKTFormatter *formatter)
         const override; // throw(io::FormattingException)
     //! @endcond
+
+    PROJ_DLL static BoundCRSNNPtr
+    create(const util::PropertyMap &properties, const CRSNNPtr &baseCRSIn,
+           const CRSNNPtr &hubCRSIn,
+           const operation::TransformationNNPtr &transformationIn);
 
     PROJ_DLL static BoundCRSNNPtr
     create(const CRSNNPtr &baseCRSIn, const CRSNNPtr &hubCRSIn,
