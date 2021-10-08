@@ -35,8 +35,6 @@ CREATE TABLE celestial_body (
     CONSTRAINT pk_celestial_body PRIMARY KEY (auth_name, code)
 ) WITHOUT ROWID;
 
-INSERT INTO celestial_body VALUES('PROJ', 'EARTH', 'Earth', 6378137.0);
-
 CREATE TABLE ellipsoid (
     auth_name TEXT NOT NULL CHECK (length(auth_name) >= 1),
     code INTEGER_OR_TEXT NOT NULL CHECK (length(code) >= 1),
@@ -155,6 +153,7 @@ CREATE TABLE geodetic_datum (
     publication_date TEXT, --- YYYY-MM-DD format
     frame_reference_epoch FLOAT, --- only set for dynamic datum, and should be set when it is a dynamic datum
     ensemble_accuracy FLOAT CHECK (ensemble_accuracy IS NULL OR ensemble_accuracy > 0), --- only for a datum ensemble. and should be set when it is a datum ensemble
+    anchor TEXT,
     deprecated BOOLEAN NOT NULL CHECK (deprecated IN (0, 1)),
     CONSTRAINT pk_geodetic_datum PRIMARY KEY (auth_name, code),
     CONSTRAINT fk_geodetic_datum_ellipsoid FOREIGN KEY (ellipsoid_auth_name, ellipsoid_code) REFERENCES ellipsoid(auth_name, code),
@@ -191,6 +190,7 @@ CREATE TABLE vertical_datum (
     publication_date TEXT CHECK (NULL OR length(publication_date) = 10), --- YYYY-MM-DD format
     frame_reference_epoch FLOAT, --- only set for dynamic datum, and should be set when it is a dynamic datum
     ensemble_accuracy FLOAT CHECK (ensemble_accuracy IS NULL OR ensemble_accuracy > 0), --- only for a datum ensemble. and should be set when it is a datum ensemble
+    anchor TEXT,
     deprecated BOOLEAN NOT NULL CHECK (deprecated IN (0, 1)),
     CONSTRAINT pk_vertical_datum PRIMARY KEY (auth_name, code)
 ) WITHOUT ROWID;
@@ -247,7 +247,7 @@ CREATE TABLE geodetic_crs(
     code INTEGER_OR_TEXT NOT NULL CHECK (length(code) >= 1),
     name TEXT NOT NULL CHECK (length(name) >= 2),
     description TEXT,
-    type TEXT NOT NULL CHECK (type IN ('geographic 2D', 'geographic 3D', 'geocentric')),
+    type TEXT NOT NULL CHECK (type IN ('geographic 2D', 'geographic 3D', 'geocentric', 'other')),
     coordinate_system_auth_name TEXT,
     coordinate_system_code INTEGER_OR_TEXT,
     datum_auth_name TEXT,
@@ -539,6 +539,7 @@ BEGIN
             'EPSG_9836_Geocentric/topocentric conversions',
             'EPSG_9837_Geographic/topocentric conversions',
             'EPSG_9838_Vertical Perspective',
+            'EPSG_9840_Orthographic',
             'EPSG_9841_Mercator (1SP) (Spherical)',
             'EPSG_9842_Equidistant Cylindrical',
             'EPSG_9843_Axis Order Reversal (2D)',
@@ -1514,3 +1515,14 @@ CREATE TABLE authority_to_authority_preference(
     allowed_authorities TEXT NOT NULL,  -- for example 'PROJ,EPSG,any'
     CONSTRAINT unique_authority_to_authority_preference UNIQUE (source_auth_name, target_auth_name)
 );
+
+-- Map 'IAU_2015' to auth_name=IAU and version=2015
+CREATE TABLE versioned_auth_name_mapping(
+    versioned_auth_name    TEXT NOT NULL PRIMARY KEY,
+    auth_name              TEXT NOT NULL,
+    version                TEXT NOT NULL,
+    priority               INTEGER NOT NULL,
+    CONSTRAINT unique_auth_name_version UNIQUE (auth_name, version),
+    CONSTRAINT unique_auth_name_priority UNIQUE (auth_name, priority)
+);
+

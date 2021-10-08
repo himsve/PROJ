@@ -201,6 +201,10 @@ const GeodeticCRS *CRS::extractGeodeticCRSRaw() const {
     if (boundCRS) {
         return boundCRS->baseCRS()->extractGeodeticCRSRaw();
     }
+    auto derivedProjectedCRS = dynamic_cast<const DerivedProjectedCRS *>(this);
+    if (derivedProjectedCRS) {
+        return derivedProjectedCRS->baseCRS()->extractGeodeticCRSRaw();
+    }
     return nullptr;
 }
 //! @endcond
@@ -1217,7 +1221,7 @@ CRSNNPtr CRS::promoteTo3D(const std::string &newName,
         try {
             transf->getTOWGS84Parameters();
             return BoundCRS::create(
-                base3DCRS,
+                createProperties(), base3DCRS,
                 boundCRS->hubCRS()->promoteTo3D(std::string(), dbContext),
                 transf->promoteTo3D(std::string(), dbContext));
         } catch (const io::FormattingException &) {
@@ -1390,6 +1394,7 @@ bool SingleCRS::baseIsEquivalentTo(
         return false;
     }
 
+    // Check datum
     if (criterion == util::IComparable::Criterion::STRICT) {
         const auto &thisDatum = d->datum;
         const auto &otherDatum = otherSingleCRS->d->datum;
@@ -1424,10 +1429,36 @@ bool SingleCRS::baseIsEquivalentTo(
         }
     }
 
-    return d->coordinateSystem->_isEquivalentTo(
-               otherSingleCRS->d->coordinateSystem.get(), criterion,
-               dbContext) &&
-           getExtensionProj4() == otherSingleCRS->getExtensionProj4();
+    // Check coordinate system
+    if (!(d->coordinateSystem->_isEquivalentTo(
+            otherSingleCRS->d->coordinateSystem.get(), criterion, dbContext))) {
+        return false;
+    }
+
+    // Now compare PROJ4 extensions
+
+    const auto &thisProj4 = getExtensionProj4();
+    const auto &otherProj4 = otherSingleCRS->getExtensionProj4();
+
+    if (thisProj4.empty() && otherProj4.empty()) {
+        return true;
+    }
+
+    if (!(thisProj4.empty() ^ otherProj4.empty())) {
+        return true;
+    }
+
+    // Asks for a "normalized" output during toString(), aimed at comparing two
+    // strings for equivalence.
+    auto formatter1 = io::PROJStringFormatter::create();
+    formatter1->setNormalizeOutput();
+    formatter1->ingestPROJString(thisProj4);
+
+    auto formatter2 = io::PROJStringFormatter::create();
+    formatter2->setNormalizeOutput();
+    formatter2->ingestPROJString(otherProj4);
+
+    return formatter1->toString() == formatter2->toString();
 }
 
 // ---------------------------------------------------------------------------
@@ -1608,7 +1639,7 @@ GeodeticCRS::velocityModel() PROJ_PURE_DEFN {
 
 // ---------------------------------------------------------------------------
 
-/** \brief Return whether the CRS is a geocentric one.
+/** \brief Return whether the CRS is a Cartesian geocentric one.
  *
  * A geocentric CRS is a geodetic CRS that has a Cartesian coordinate system
  * with three axis, whose direction is respectively
@@ -1625,6 +1656,31 @@ bool GeodeticCRS::isGeocentric() PROJ_PURE_DEFN {
            &axisList[0]->direction() == &cs::AxisDirection::GEOCENTRIC_X &&
            &axisList[1]->direction() == &cs::AxisDirection::GEOCENTRIC_Y &&
            &axisList[2]->direction() == &cs::AxisDirection::GEOCENTRIC_Z;
+}
+
+// ---------------------------------------------------------------------------
+
+/** \brief Return whether the CRS is a Spherical planetocentric one.
+ *
+ * A Spherical planetocentric CRS is a geodetic CRS that has a spherical
+ * (angular) coordinate system with 2 axis, which represent geocentric latitude/
+ * longitude or longitude/geocentric latitude.
+ *
+ * Such CRS are typically used in use case that apply to non-Earth bodies.
+ *
+ * @return true if the CRS is a Spherical planetocentric CRS.
+ *
+ * @since 8.2
+ */
+bool GeodeticCRS::isSphericalPlanetocentric() PROJ_PURE_DEFN {
+    const auto &cs = coordinateSystem();
+    const auto &axisList = cs->axisList();
+    return axisList.size() == 2 &&
+           dynamic_cast<cs::SphericalCS *>(cs.get()) != nullptr &&
+           ((ci_equal(axisList[0]->nameStr(), "planetocentric latitude") &&
+             ci_equal(axisList[1]->nameStr(), "planetocentric longitude")) ||
+            (ci_equal(axisList[0]->nameStr(), "planetocentric longitude") &&
+             ci_equal(axisList[1]->nameStr(), "planetocentric latitude")));
 }
 
 // ---------------------------------------------------------------------------
@@ -1971,6 +2027,61 @@ void GeodeticCRS::addGeocentricUnitConversionIntoPROJString(
 // ---------------------------------------------------------------------------
 
 //! @cond Doxygen_Suppress
+void GeodeticCRS::addAngularUnitConvertAndAxisSwap(
+    io::PROJStringFormatter *formatter) const {
+    const auto &axisList = coordinateSystem()->axisList();
+
+    formatter->addStep("unitconvert");
+    formatter->addParam("xy_in", "rad");
+    if (axisList.size() == 3 && !formatter->omitZUnitConversion()) {
+        formatter->addParam("z_in", "m");
+    }
+    {
+        const auto &unitHoriz = axisList[0]->unit();
+        const auto projUnit = unitHoriz.exportToPROJString();
+        if (projUnit.empty()) {
+            formatter->addParam("xy_out", unitHoriz.conversionToSI());
+        } else {
+            formatter->addParam("xy_out", projUnit);
+        }
+    }
+    if (axisList.size() == 3 && !formatter->omitZUnitConversion()) {
+        const auto &unitZ = axisList[2]->unit();
+        auto projVUnit = unitZ.exportToPROJString();
+        if (projVUnit.empty()) {
+            formatter->addParam("z_out", unitZ.conversionToSI());
+        } else {
+            formatter->addParam("z_out", projVUnit);
+        }
+    }
+
+    const char *order[2] = {nullptr, nullptr};
+    const char *one = "1";
+    const char *two = "2";
+    for (int i = 0; i < 2; i++) {
+        const auto &dir = axisList[i]->direction();
+        if (&dir == &cs::AxisDirection::WEST) {
+            order[i] = "-1";
+        } else if (&dir == &cs::AxisDirection::EAST) {
+            order[i] = one;
+        } else if (&dir == &cs::AxisDirection::SOUTH) {
+            order[i] = "-2";
+        } else if (&dir == &cs::AxisDirection::NORTH) {
+            order[i] = two;
+        }
+    }
+    if (order[0] && order[1] && (order[0] != one || order[1] != two)) {
+        formatter->addStep("axisswap");
+        char orderStr[10];
+        sprintf(orderStr, "%.2s,%.2s", order[0], order[1]);
+        formatter->addParam("order", orderStr);
+    }
+}
+//! @endcond
+
+// ---------------------------------------------------------------------------
+
+//! @cond Doxygen_Suppress
 void GeodeticCRS::_exportToPROJString(
     io::PROJStringFormatter *formatter) const // throw(io::FormattingException)
 {
@@ -1982,19 +2093,46 @@ void GeodeticCRS::_exportToPROJString(
         return;
     }
 
-    if (!isGeocentric()) {
+    if (isGeocentric()) {
+        if (!formatter->getCRSExport()) {
+            formatter->addStep("cart");
+        } else {
+            formatter->addStep("geocent");
+        }
+
+        addDatumInfoToPROJString(formatter);
+        addGeocentricUnitConversionIntoPROJString(formatter);
+    } else if (isSphericalPlanetocentric()) {
+        if (!formatter->getCRSExport()) {
+
+            if (!formatter->omitProjLongLatIfPossible() ||
+                primeMeridian()->longitude().getSIValue() != 0.0 ||
+                !ellipsoid()->isSphere() ||
+                !formatter->getTOWGS84Parameters().empty() ||
+                !formatter->getHDatumExtension().empty()) {
+                formatter->addStep("geoc");
+                addDatumInfoToPROJString(formatter);
+            }
+
+            addAngularUnitConvertAndAxisSwap(formatter);
+        } else {
+            io::FormattingException::Throw(
+                "GeodeticCRS::exportToPROJString() not supported on spherical "
+                "planetocentric coordinate systems");
+            // The below code now works as input to PROJ, but I'm not sure we
+            // want to propagate this, given that we got cs2cs doing conversion
+            // in the wrong direction in past versions.
+            /*formatter->addStep("longlat");
+            formatter->addParam("geoc");
+
+            addDatumInfoToPROJString(formatter);*/
+        }
+    } else {
         io::FormattingException::Throw(
             "GeodeticCRS::exportToPROJString() only "
-            "supports geocentric coordinate systems");
+            "supports geocentric or spherical planetocentric "
+            "coordinate systems");
     }
-
-    if (!formatter->getCRSExport()) {
-        formatter->addStep("cart");
-    } else {
-        formatter->addStep("geocent");
-    }
-    addDatumInfoToPROJString(formatter);
-    addGeocentricUnitConversionIntoPROJString(formatter);
 }
 //! @endcond
 
@@ -2274,6 +2412,7 @@ GeodeticCRS::identify(const io::AuthorityFactoryPtr &authorityFactory) const {
         auto searchByDatumCode =
             [this, &authorityFactory, &res, &geodetic_crs_type, crsCriterion,
              &dbContext](const common::IdentifiedObjectNNPtr &l_datum) {
+                bool resModified = false;
                 for (const auto &id : l_datum->identifiers()) {
                     try {
                         auto tempRes =
@@ -2284,11 +2423,13 @@ GeodeticCRS::identify(const io::AuthorityFactoryPtr &authorityFactory) const {
                             if (_isEquivalentTo(crs.get(), crsCriterion,
                                                 dbContext)) {
                                 res.emplace_back(crs, 70);
+                                resModified = true;
                             }
                         }
                     } catch (const std::exception &) {
                     }
                 }
+                return resModified;
             };
 
         auto searchByEllipsoid = [this, &authorityFactory, &res, &thisDatum,
@@ -2317,7 +2458,7 @@ GeodeticCRS::identify(const io::AuthorityFactoryPtr &authorityFactory) const {
                                     thisDatum->primeMeridian().get(),
                                     util::IComparable::Criterion::EQUIVALENT,
                                     dbContext) &&
-                                (!l_implicitCS ||
+                                (l_implicitCS ||
                                  coordinateSystem()->_isEquivalentTo(
                                      crs->coordinateSystem().get(),
                                      util::IComparable::Criterion::EQUIVALENT,
@@ -2331,8 +2472,8 @@ GeodeticCRS::identify(const io::AuthorityFactoryPtr &authorityFactory) const {
             }
         };
 
-        const auto searchByDatumOrEllipsoid = [&authorityFactory, &res,
-                                               &thisDatum, searchByDatumCode,
+        const auto searchByDatumOrEllipsoid = [&authorityFactory, &thisDatum,
+                                               searchByDatumCode,
                                                searchByEllipsoid]() {
             if (!thisDatum->identifiers().empty()) {
                 searchByDatumCode(thisDatum);
@@ -2342,11 +2483,12 @@ GeodeticCRS::identify(const io::AuthorityFactoryPtr &authorityFactory) const {
                     {io::AuthorityFactory::ObjectType::
                          GEODETIC_REFERENCE_FRAME},
                     false);
-                const size_t sizeBefore = res.size();
+                bool resModified = false;
                 for (const auto &candidateDatum : candidateDatums) {
-                    searchByDatumCode(candidateDatum);
+                    if (searchByDatumCode(candidateDatum))
+                        resModified = true;
                 }
-                if (sizeBefore == res.size()) {
+                if (!resModified) {
                     searchByEllipsoid();
                 }
             }
@@ -2851,61 +2993,6 @@ GeographicCRS::demoteTo2D(const std::string &newName,
     return NN_NO_CHECK(std::dynamic_pointer_cast<GeographicCRS>(
         shared_from_this().as_nullable()));
 }
-
-// ---------------------------------------------------------------------------
-
-//! @cond Doxygen_Suppress
-void GeographicCRS::addAngularUnitConvertAndAxisSwap(
-    io::PROJStringFormatter *formatter) const {
-    const auto &axisList = coordinateSystem()->axisList();
-
-    formatter->addStep("unitconvert");
-    formatter->addParam("xy_in", "rad");
-    if (axisList.size() == 3 && !formatter->omitZUnitConversion()) {
-        formatter->addParam("z_in", "m");
-    }
-    {
-        const auto &unitHoriz = axisList[0]->unit();
-        const auto projUnit = unitHoriz.exportToPROJString();
-        if (projUnit.empty()) {
-            formatter->addParam("xy_out", unitHoriz.conversionToSI());
-        } else {
-            formatter->addParam("xy_out", projUnit);
-        }
-    }
-    if (axisList.size() == 3 && !formatter->omitZUnitConversion()) {
-        const auto &unitZ = axisList[2]->unit();
-        auto projVUnit = unitZ.exportToPROJString();
-        if (projVUnit.empty()) {
-            formatter->addParam("z_out", unitZ.conversionToSI());
-        } else {
-            formatter->addParam("z_out", projVUnit);
-        }
-    }
-
-    const char *order[2] = {nullptr, nullptr};
-    const char *one = "1";
-    const char *two = "2";
-    for (int i = 0; i < 2; i++) {
-        const auto &dir = axisList[i]->direction();
-        if (&dir == &cs::AxisDirection::WEST) {
-            order[i] = "-1";
-        } else if (&dir == &cs::AxisDirection::EAST) {
-            order[i] = one;
-        } else if (&dir == &cs::AxisDirection::SOUTH) {
-            order[i] = "-2";
-        } else if (&dir == &cs::AxisDirection::NORTH) {
-            order[i] = two;
-        }
-    }
-    if (order[0] && order[1] && (order[0] != one || order[1] != two)) {
-        formatter->addStep("axisswap");
-        char orderStr[10];
-        sprintf(orderStr, "%.2s,%.2s", order[0], order[1]);
-        formatter->addParam("order", orderStr);
-    }
-}
-//! @endcond
 
 // ---------------------------------------------------------------------------
 
@@ -4111,6 +4198,17 @@ ProjectedCRS::create(const util::PropertyMap &properties,
 bool ProjectedCRS::_isEquivalentTo(
     const util::IComparable *other, util::IComparable::Criterion criterion,
     const io::DatabaseContextPtr &dbContext) const {
+    auto otherProjCRS = dynamic_cast<const ProjectedCRS *>(other);
+    if (otherProjCRS != nullptr &&
+        criterion == util::IComparable::Criterion::EQUIVALENT &&
+        (d->baseCRS_->hasImplicitCS() ||
+         otherProjCRS->d->baseCRS_->hasImplicitCS())) {
+        // If one of the 2 base CRS has implicit coordinate system, then
+        // relax the check. The axis order of the base CRS doesn't matter
+        // for most purposes.
+        criterion =
+            util::IComparable::Criterion::EQUIVALENT_EXCEPT_AXIS_ORDER_GEOGCRS;
+    }
     return other != nullptr && util::isOfExactType<ProjectedCRS>(*other) &&
            DerivedCRS::_isEquivalentTo(other, criterion, dbContext);
 }
@@ -5294,6 +5392,37 @@ BoundCRS::transformation() PROJ_PURE_DEFN {
 /** \brief Instantiate a BoundCRS from a base CRS, a hub CRS and a
  * transformation.
  *
+ * @param properties See \ref general_properties.
+ * @param baseCRSIn base CRS.
+ * @param hubCRSIn hub CRS.
+ * @param transformationIn transformation from base CRS to hub CRS.
+ * @return new BoundCRS.
+ * @since PROJ 8.2
+ */
+BoundCRSNNPtr
+BoundCRS::create(const util::PropertyMap &properties, const CRSNNPtr &baseCRSIn,
+                 const CRSNNPtr &hubCRSIn,
+                 const operation::TransformationNNPtr &transformationIn) {
+    auto crs = BoundCRS::nn_make_shared<BoundCRS>(baseCRSIn, hubCRSIn,
+                                                  transformationIn);
+    crs->assignSelf(crs);
+    const auto &l_name = baseCRSIn->nameStr();
+    if (properties.get(common::IdentifiedObject::NAME_KEY) == nullptr &&
+        !l_name.empty()) {
+        auto newProperties(properties);
+        newProperties.set(common::IdentifiedObject::NAME_KEY, l_name);
+        crs->setProperties(newProperties);
+    } else {
+        crs->setProperties(properties);
+    }
+    return crs;
+}
+
+// ---------------------------------------------------------------------------
+
+/** \brief Instantiate a BoundCRS from a base CRS, a hub CRS and a
+ * transformation.
+ *
  * @param baseCRSIn base CRS.
  * @param hubCRSIn hub CRS.
  * @param transformationIn transformation from base CRS to hub CRS.
@@ -5302,15 +5431,7 @@ BoundCRS::transformation() PROJ_PURE_DEFN {
 BoundCRSNNPtr
 BoundCRS::create(const CRSNNPtr &baseCRSIn, const CRSNNPtr &hubCRSIn,
                  const operation::TransformationNNPtr &transformationIn) {
-    auto crs = BoundCRS::nn_make_shared<BoundCRS>(baseCRSIn, hubCRSIn,
-                                                  transformationIn);
-    crs->assignSelf(crs);
-    const auto &l_name = baseCRSIn->nameStr();
-    if (!l_name.empty()) {
-        crs->setProperties(util::PropertyMap().set(
-            common::IdentifiedObject::NAME_KEY, l_name));
-    }
-    return crs;
+    return create(util::PropertyMap(), baseCRSIn, hubCRSIn, transformationIn);
 }
 
 // ---------------------------------------------------------------------------
@@ -5415,6 +5536,7 @@ void BoundCRS::_exportToWKT(io::WKTFormatter *formatter) const {
         formatter->setAbridgedTransformation(true);
         d->transformation()->_exportToWKT(formatter);
         formatter->setAbridgedTransformation(false);
+        ObjectUsage::baseExportToWKT(formatter);
         formatter->endNode();
     } else {
 
@@ -5455,8 +5577,14 @@ void BoundCRS::_exportToJSON(
     io::JSONFormatter *formatter) const // throw(io::FormattingException)
 {
     auto writer = formatter->writer();
-    auto objectContext(
-        formatter->MakeObjectContext("BoundCRS", !identifiers().empty()));
+    const auto &l_name = nameStr();
+
+    auto objectContext(formatter->MakeObjectContext("BoundCRS", false));
+
+    if (!l_name.empty() && l_name != d->baseCRS()->nameStr()) {
+        writer->AddObjKey("name");
+        writer->Add(l_name);
+    }
 
     writer->AddObjKey("source_crs");
     d->baseCRS()->_exportToJSON(formatter);
@@ -5469,6 +5597,8 @@ void BoundCRS::_exportToJSON(
     formatter->setAbridgedTransformation(true);
     d->transformation()->_exportToJSON(formatter);
     formatter->setAbridgedTransformation(false);
+
+    ObjectUsage::baseExportToJSON(formatter);
 }
 //! @endcond
 
@@ -5944,7 +6074,9 @@ void DerivedGeographicCRS::_exportToPROJString(
     }
 
     if (ci_equal(methodName,
-                 PROJ_WKT2_NAME_METHOD_POLE_ROTATION_GRIB_CONVENTION)) {
+                 PROJ_WKT2_NAME_METHOD_POLE_ROTATION_GRIB_CONVENTION) ||
+        ci_equal(methodName,
+                 PROJ_WKT2_NAME_METHOD_POLE_ROTATION_NETCDF_CF_CONVENTION)) {
         l_conv->_exportToPROJString(formatter);
         return;
     }
