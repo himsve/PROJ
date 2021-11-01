@@ -22,7 +22,7 @@
 
 	Marcin Ligas and Piotr Banasik at AGU in Krakow has implemented and tested a simular application:
 
-	https://www.degruyter.com/downloadpdf/j/rgg.2014.97.issue-1/rgg-2014-0009/rgg-2014-0009.pdf
+	https://sciendo.com/de/article/10.2478/rgg-2014-0009	
 
 ******************************************************************************/
 
