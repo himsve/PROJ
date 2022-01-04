@@ -78,7 +78,7 @@ copyright = u'1983-{0}'.format(now.year)
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 version = '8.2.0'
-data_version = '1.7'
+data_version = '1.8'
 
 # use same |release| as |version|
 release = version
@@ -206,7 +206,7 @@ html_context = {
     'github_user': 'OSGeo',
     'github_repo': 'PROJ',
     # TODO: edit when switching active branch
-    'github_version': '/8.0/docs/source/',
+    'github_version': '8.2/docs/source/',
 }
 
 # Add any extra paths that contain custom files (such as robots.txt or
