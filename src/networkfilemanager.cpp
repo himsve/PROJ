@@ -30,6 +30,11 @@
 #endif
 #define LRU11_DO_NOT_DEFINE_OUT_OF_CLASS_METHODS
 
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+// For usleep() on Cygwin
+#define _GNU_SOURCE
+#endif
+
 #include <stdlib.h>
 
 #include <algorithm>
@@ -2076,8 +2081,6 @@ int proj_context_is_network_enabled(PJ_CONTEXT *ctx) {
     ctx->networking.enabled_env_variable_checked = true;
     return ctx->networking.enabled;
 }
-
-//! @endcond
 
 // ---------------------------------------------------------------------------
 

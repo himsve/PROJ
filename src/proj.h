@@ -140,15 +140,17 @@ extern "C" {
 /*! @cond Doxygen_Suppress */
 
 #ifndef PROJ_DLL
-#ifdef PROJ_MSVC_DLL_EXPORT
-#define PROJ_DLL __declspec(dllexport)
-#elif defined(PROJ_MSVC_DLL_IMPORT)
-#define PROJ_DLL __declspec(dllimport)
-#elif defined(__GNUC__)
-#define PROJ_DLL __attribute__ ((visibility("default")))
-#else
-#define PROJ_DLL
-#endif
+#  if defined(_MSC_VER)
+#    ifdef PROJ_MSVC_DLL_EXPORT
+#      define PROJ_DLL __declspec(dllexport)
+#    else
+#      define PROJ_DLL __declspec(dllimport)
+#    endif
+#  elif defined(__GNUC__)
+#    define PROJ_DLL __attribute__ ((visibility("default")))
+#  else
+#    define PROJ_DLL
+#  endif
 #endif
 
 #ifdef PROJ_SUPPRESS_DEPRECATION_MESSAGE
@@ -379,7 +381,9 @@ PJ_CONTEXT PROJ_DLL *proj_context_clone (PJ_CONTEXT *ctx);
 typedef const char* (*proj_file_finder) (PJ_CONTEXT *ctx, const char*, void* user_data);
 
 void PROJ_DLL proj_context_set_file_finder(PJ_CONTEXT *ctx, proj_file_finder finder, void* user_data);
+/*! @endcond */
 void PROJ_DLL proj_context_set_search_paths(PJ_CONTEXT *ctx, int count_paths, const char* const* paths);
+/*! @cond Doxygen_Suppress */
 void PROJ_DLL proj_context_set_ca_bundle_path(PJ_CONTEXT *ctx, const char *path);
 void PROJ_DLL proj_context_use_proj4_init_rules(PJ_CONTEXT *ctx, int enable);
 int PROJ_DLL proj_context_get_use_proj4_init_rules(PJ_CONTEXT *ctx, int from_legacy_code_path);
@@ -604,10 +608,10 @@ int PROJ_DLL proj_trans_bounds(
     PJ_CONTEXT* context,
     PJ *P,
     PJ_DIRECTION direction,
-    const double xmin,
-    const double ymin,
-    const double xmax,
-    const double ymax,
+    double xmin,
+    double ymin,
+    double xmax,
+    double ymax,
     double* out_xmin,
     double* out_ymin,
     double* out_xmax,

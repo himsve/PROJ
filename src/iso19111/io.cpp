@@ -866,6 +866,8 @@ void WKTFormatter::stopInversion() {
 bool WKTFormatter::isInverted() const { return d->inversionStack_.back(); }
 #endif
 
+//! @endcond
+
 // ---------------------------------------------------------------------------
 
 //! @cond Doxygen_Suppress
@@ -1262,7 +1264,8 @@ struct WKTParser::Private {
                           bool removeInverseOf);
 
     PropertyMap &buildProperties(const WKTNodeNNPtr &node,
-                                 bool removeInverseOf = false);
+                                 bool removeInverseOf = false,
+                                 bool hasName = true);
 
     ObjectDomainPtr buildObjectDomain(const WKTNodeNNPtr &node);
 
@@ -1410,6 +1413,7 @@ struct WKTParser::Private {
     ConcatenatedOperationNNPtr
     buildConcatenatedOperation(const WKTNodeNNPtr &node);
 };
+//! @endcond
 
 // ---------------------------------------------------------------------------
 
@@ -1577,7 +1581,8 @@ IdentifierPtr WKTParser::Private::buildId(const WKTNodeNNPtr &node,
 // ---------------------------------------------------------------------------
 
 PropertyMap &WKTParser::Private::buildProperties(const WKTNodeNNPtr &node,
-                                                 bool removeInverseOf) {
+                                                 bool removeInverseOf,
+                                                 bool hasName) {
 
     if (propertyCount_ == MAX_PROPERTY_SIZE) {
         throw ParsingException("MAX_PROPERTY_SIZE reached");
@@ -1603,7 +1608,7 @@ PropertyMap &WKTParser::Private::buildProperties(const WKTNodeNNPtr &node,
         }
     }
 
-    if (!nodeChildren.empty()) {
+    if (hasName && !nodeChildren.empty()) {
         const auto &nodeName(nodeP->value());
         auto name(stripQuotes(nodeChildren[0]));
         if (removeInverseOf && starts_with(name, "Inverse of ")) {
@@ -3800,6 +3805,39 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
         tryToIdentifyWKT1Method ? getMappingFromWKT1(projectionName) : nullptr;
     if (mapping) {
         mapping = selectSphericalOrEllipsoidal(mapping, baseGeodCRS);
+    } else if (metadata::Identifier::isEquivalentName(
+                   projectionName.c_str(), "Lambert Conformal Conic")) {
+        // Lambert Conformal Conic or Lambert_Conformal_Conic are respectively
+        // used by Oracle WKT and Trimble for either LCC 1SP or 2SP, so we
+        // have to look at parameters to figure out the variant.
+        bool found2ndStdParallel = false;
+        bool foundScaleFactor = false;
+        for (const auto &childNode : projCRSNode->GP()->children()) {
+            if (ci_equal(childNode->GP()->value(), WKTConstants::PARAMETER)) {
+                const auto &childNodeChildren = childNode->GP()->children();
+                if (childNodeChildren.size() < 2) {
+                    ThrowNotEnoughChildren(WKTConstants::PARAMETER);
+                }
+                const std::string wkt1ParameterName(
+                    stripQuotes(childNodeChildren[0]));
+                if (metadata::Identifier::isEquivalentName(
+                        wkt1ParameterName.c_str(), WKT1_STANDARD_PARALLEL_2)) {
+                    found2ndStdParallel = true;
+                } else if (metadata::Identifier::isEquivalentName(
+                               wkt1ParameterName.c_str(), WKT1_SCALE_FACTOR)) {
+                    foundScaleFactor = true;
+                }
+            }
+        }
+        if (found2ndStdParallel && !foundScaleFactor) {
+            mapping = getMapping(EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_2SP);
+        } else if (!found2ndStdParallel && foundScaleFactor) {
+            mapping = getMapping(EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_1SP);
+        } else if (found2ndStdParallel && foundScaleFactor) {
+            // Not sure if that happens
+            mapping = getMapping(
+                EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_2SP_MICHIGAN);
+        }
     }
 
     // For Krovak, we need to look at axis to decide between the Krovak and
@@ -3833,7 +3871,7 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
         }
         foundParameters.resize(countParams);
     }
-    bool found2ndStdParallel = false;
+
     for (const auto &childNode : projCRSNode->GP()->children()) {
         if (ci_equal(childNode->GP()->value(), WKTConstants::PARAMETER)) {
             const auto &childNodeChildren = childNode->GP()->children();
@@ -3859,13 +3897,12 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
             if (mapping &&
                 mapping->epsg_code == EPSG_CODE_METHOD_MERCATOR_VARIANT_B &&
                 ci_equal(parameterName, "latitude_of_origin")) {
-                for (size_t idx = 0; mapping->params[idx] != nullptr; ++idx) {
-                    if (mapping->params[idx]->epsg_code ==
-                        EPSG_CODE_PARAMETER_LATITUDE_OF_NATURAL_ORIGIN) {
-                        foundParameters[idx] = true;
-                        break;
-                    }
-                }
+                // Some illegal formulations of Mercator_2SP have a unexpected
+                // latitude_of_origin parameter. We accept it on import, but
+                // do not accept it when exporting to PROJ string, unless it is
+                // zero.
+                // No need to try to update foundParameters[] as this is a
+                // unexpected one.
                 parameterName = EPSG_NAME_PARAMETER_LATITUDE_OF_NATURAL_ORIGIN;
                 propertiesParameter.set(
                     Identifier::CODE_KEY,
@@ -3886,10 +3923,6 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
                     propertiesParameter.set(Identifier::CODESPACE_KEY,
                                             Identifier::EPSG);
                 }
-                if (paramMapping->epsg_code ==
-                    EPSG_CODE_PARAMETER_LATITUDE_2ND_STD_PARALLEL) {
-                    found2ndStdParallel = true;
-                }
             }
             propertiesParameter.set(IdentifiedObject::NAME_KEY, parameterName);
             parameters.push_back(
@@ -3904,14 +3937,6 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
                     concat("unhandled parameter value type : ", paramValue));
             }
         }
-    }
-
-    // Oracle WKT: make sure that the 2nd std parallel parameter is found to
-    // select the LCC_2SP mapping
-    if (metadata::Identifier::isEquivalentName(wkt1ProjectionName.c_str(),
-                                               "Lambert Conformal Conic") &&
-        !found2ndStdParallel) {
-        propertiesMethod.set(IdentifiedObject::NAME_KEY, wkt1ProjectionName);
     }
 
     // Add back important parameters that should normally be present, but
@@ -3942,6 +3967,48 @@ ConversionNNPtr WKTParser::Private::buildProjectionStandard(
                     OperationParameter::create(propertiesParameter));
                 values.push_back(ParameterValue::create(
                     Measure(1.0, UnitOfMeasure::SCALE_UNITY)));
+            }
+        }
+    }
+
+    if (mapping && (mapping->epsg_code ==
+                        EPSG_CODE_METHOD_HOTINE_OBLIQUE_MERCATOR_VARIANT_A ||
+                    mapping->epsg_code ==
+                        EPSG_CODE_METHOD_HOTINE_OBLIQUE_MERCATOR_VARIANT_B)) {
+        // Special case when importing some GDAL WKT of Hotine Oblique Mercator
+        // that have a Azimuth parameter but lacks the Rectified Grid Angle.
+        // We have code in the exportToPROJString() to deal with that situation,
+        // but also adds the rectified grid angle from the azimuth on import.
+        bool foundAngleRecifiedToSkewGrid = false;
+        bool foundAzimuth = false;
+        for (size_t idx = 0; mapping->params[idx] != nullptr; ++idx) {
+            if (foundParameters[idx] &&
+                mapping->params[idx]->epsg_code ==
+                    EPSG_CODE_PARAMETER_ANGLE_RECTIFIED_TO_SKEW_GRID) {
+                foundAngleRecifiedToSkewGrid = true;
+            } else if (foundParameters[idx] &&
+                       mapping->params[idx]->epsg_code ==
+                           EPSG_CODE_PARAMETER_AZIMUTH_INITIAL_LINE) {
+                foundAzimuth = true;
+            }
+        }
+        if (!foundAngleRecifiedToSkewGrid && foundAzimuth) {
+            for (size_t idx = 0; idx < parameters.size(); ++idx) {
+                if (parameters[idx]->getEPSGCode() ==
+                    EPSG_CODE_PARAMETER_AZIMUTH_INITIAL_LINE) {
+                    PropertyMap propertiesParameter;
+                    propertiesParameter.set(
+                        Identifier::CODE_KEY,
+                        EPSG_CODE_PARAMETER_ANGLE_RECTIFIED_TO_SKEW_GRID);
+                    propertiesParameter.set(Identifier::CODESPACE_KEY,
+                                            Identifier::EPSG);
+                    propertiesParameter.set(
+                        IdentifiedObject::NAME_KEY,
+                        EPSG_NAME_PARAMETER_ANGLE_RECTIFIED_TO_SKEW_GRID);
+                    parameters.push_back(
+                        OperationParameter::create(propertiesParameter));
+                    values.push_back(values[idx]);
+                }
             }
         }
     }
@@ -4649,8 +4716,9 @@ BoundCRSNNPtr WKTParser::Private::buildBoundCRS(const WKTNodeNNPtr &node) {
         NN_NO_CHECK(targetCRS), nullptr, buildProperties(methodNode),
         parameters, values, std::vector<PositionalAccuracyNNPtr>());
 
-    return BoundCRS::create(buildProperties(node), NN_NO_CHECK(sourceCRS),
-                            NN_NO_CHECK(targetCRS), transformation);
+    return BoundCRS::create(buildProperties(node, false, false),
+                            NN_NO_CHECK(sourceCRS), NN_NO_CHECK(targetCRS),
+                            transformation);
 }
 
 // ---------------------------------------------------------------------------
@@ -7606,6 +7674,13 @@ const std::string &PROJStringFormatter::toString() const {
             continue;
         }
 
+        // axisswap order=1,2,-3 is its own inverse
+        if (step.name == "axisswap" && paramCount == 1 &&
+            step.paramValues[0].equals("order", "1,2,-3")) {
+            step.inverted = false;
+            continue;
+        }
+
         // handle unitconvert inverse
         if (step.name == "unitconvert" && paramCount == 2 &&
             step.paramValues[0].keyEquals("xy_in") &&
@@ -7654,7 +7729,7 @@ const std::string &PROJStringFormatter::toString() const {
                 iterCur = steps.erase(iterPrev, std::next(iterCur));
                 if (iterCur != steps.begin())
                     iterCur = std::prev(iterCur);
-                if (iterCur == steps.begin())
+                if (iterCur == steps.begin() && iterCur != steps.end())
                     ++iterCur;
             };
 
@@ -8224,58 +8299,43 @@ static void
 PROJStringSyntaxParser(const std::string &projString, std::vector<Step> &steps,
                        std::vector<Step::KeyValue> &globalParamValues,
                        std::string &title) {
-    const char *c_str = projString.c_str();
     std::vector<std::string> tokens;
 
     bool hasProj = false;
     bool hasInit = false;
     bool hasPipeline = false;
-    {
-        size_t i = 0;
-        while (true) {
-            for (; isspace(static_cast<unsigned char>(c_str[i])); i++) {
-            }
-            std::string token;
-            bool in_string = false;
-            for (; c_str[i]; i++) {
-                if (in_string) {
-                    if (c_str[i] == '"' && c_str[i + 1] == '"') {
-                        i++;
-                    } else if (c_str[i] == '"') {
-                        in_string = false;
-                        continue;
-                    }
-                } else if (c_str[i] == '=' && c_str[i + 1] == '"') {
-                    in_string = true;
-                    token += c_str[i];
-                    i++;
-                    continue;
-                } else if (isspace(static_cast<unsigned char>(c_str[i]))) {
-                    break;
-                }
-                token += c_str[i];
-            }
-            if (in_string) {
-                throw ParsingException("Unbalanced double quote");
-            }
-            if (token.empty()) {
-                break;
-            }
-            if (!hasPipeline &&
-                (token == "proj=pipeline" || token == "+proj=pipeline")) {
-                hasPipeline = true;
-            } else if (!hasProj && (starts_with(token, "proj=") ||
-                                    starts_with(token, "+proj="))) {
-                hasProj = true;
-            } else if (!hasInit && (starts_with(token, "init=") ||
-                                    starts_with(token, "+init="))) {
-                hasInit = true;
-            }
-            tokens.emplace_back(token);
+
+    std::string projStringModified(projString);
+
+    // Special case for "+title=several words +foo=bar"
+    if (starts_with(projStringModified, "+title=") &&
+        projStringModified.size() > 7 && projStringModified[7] != '"') {
+        const auto plusPos = projStringModified.find(" +", 1);
+        const auto spacePos = projStringModified.find(' ');
+        if (plusPos != std::string::npos && spacePos != std::string::npos &&
+            spacePos < plusPos) {
+            std::string tmp("+title=");
+            tmp += pj_double_quote_string_param_if_needed(
+                projStringModified.substr(7, plusPos - 7));
+            tmp += projStringModified.substr(plusPos);
+            projStringModified = std::move(tmp);
         }
     }
 
-    bool prevWasTitle = false;
+    size_t argc = pj_trim_argc(&projStringModified[0]);
+    char **argv = pj_trim_argv(argc, &projStringModified[0]);
+    for (size_t i = 0; i < argc; i++) {
+        std::string token(argv[i]);
+        if (!hasPipeline && token == "proj=pipeline") {
+            hasPipeline = true;
+        } else if (!hasProj && starts_with(token, "proj=")) {
+            hasProj = true;
+        } else if (!hasInit && starts_with(token, "init=")) {
+            hasInit = true;
+        }
+        tokens.emplace_back(token);
+    }
+    free(argv);
 
     if (!hasPipeline) {
         if (hasProj || hasInit) {
@@ -8283,16 +8343,8 @@ PROJStringSyntaxParser(const std::string &projString, std::vector<Step> &steps,
         }
 
         for (auto &word : tokens) {
-            if (word[0] == '+') {
-                word = word.substr(1);
-            } else if (prevWasTitle && word.find('=') == std::string::npos) {
-                title += " ";
-                title += word;
-                continue;
-            }
-
-            prevWasTitle = false;
-            if (starts_with(word, "proj=") && !hasInit) {
+            if (starts_with(word, "proj=") && !hasInit &&
+                steps.back().name.empty()) {
                 assert(hasProj);
                 auto stepName = word.substr(strlen("proj="));
                 steps.back().name = stepName;
@@ -8307,7 +8359,6 @@ PROJStringSyntaxParser(const std::string &projString, std::vector<Step> &steps,
                 }
             } else if (starts_with(word, "title=")) {
                 title = word.substr(strlen("title="));
-                prevWasTitle = true;
             } else if (word != "step") {
                 const auto pos = word.find('=');
                 auto key = word.substr(0, pos);
@@ -8328,15 +8379,6 @@ PROJStringSyntaxParser(const std::string &projString, std::vector<Step> &steps,
     bool inPipeline = false;
     bool invGlobal = false;
     for (auto &word : tokens) {
-        if (word[0] == '+') {
-            word = word.substr(1);
-        } else if (prevWasTitle && word.find('=') == std::string::npos) {
-            title += " ";
-            title += word;
-            continue;
-        }
-
-        prevWasTitle = false;
         if (word == "proj=pipeline") {
             if (inPipeline) {
                 throw ParsingException("nested pipeline not supported");
@@ -8364,7 +8406,6 @@ PROJStringSyntaxParser(const std::string &projString, std::vector<Step> &steps,
             steps.back().isInit = true;
         } else if (!inPipeline && starts_with(word, "title=")) {
             title = word.substr(strlen("title="));
-            prevWasTitle = true;
         } else {
             const auto pos = word.find('=');
             auto key = word.substr(0, pos);
@@ -8835,6 +8876,8 @@ struct PROJStringParser::Private {
     SphericalCSNNPtr buildSphericalCS(int iStep, int iUnitConvert,
                                       int iAxisSwap, bool ignorePROJAxis);
 };
+
+//! @endcond
 
 // ---------------------------------------------------------------------------
 
@@ -10173,6 +10216,8 @@ PROJStringParser::Private::buildProjectedCRS(int iStep,
                 }
             } else if (param->unit_type == UnitOfMeasure::Type::SCALE) {
                 value = 1;
+            } else if (step.name == "peirce_q" && proj_name == "lat_0") {
+                value = 90;
             }
 
             PropertyMap propertiesParameter;
@@ -10494,7 +10539,8 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
                     std::string expanded;
                     if (!d->title_.empty()) {
                         expanded = "title=";
-                        expanded += d->title_;
+                        expanded +=
+                            pj_double_quote_string_param_if_needed(d->title_);
                     }
                     for (const auto &pair : d->steps_[0].paramValues) {
                         if (!expanded.empty())
@@ -10503,7 +10549,8 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
                         expanded += pair.key;
                         if (!pair.value.empty()) {
                             expanded += '=';
-                            expanded += pair.value;
+                            expanded += pj_double_quote_string_param_if_needed(
+                                pair.value);
                         }
                     }
                     expanded += ' ';
@@ -10533,7 +10580,8 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
         }
         std::string expanded;
         if (!d->title_.empty()) {
-            expanded = "title=" + d->title_;
+            expanded =
+                "title=" + pj_double_quote_string_param_if_needed(d->title_);
         }
         bool first = true;
         bool has_init_term = false;
@@ -10559,7 +10607,7 @@ PROJStringParser::createFromPROJString(const std::string &projString) {
             expanded += pair.key;
             if (!pair.value.empty()) {
                 expanded += '=';
-                expanded += pair.value;
+                expanded += pj_double_quote_string_param_if_needed(pair.value);
             }
         }
 

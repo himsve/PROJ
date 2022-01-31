@@ -47,6 +47,10 @@
 
 #include <sqlite3.h>
 
+#if !defined(_WIN32)
+#include <sys/resource.h>
+#endif
+
 #ifndef __MINGW32__
 #include <thread>
 #endif
@@ -1793,12 +1797,12 @@ TEST_F(CApi, proj_create_operations_dont_discard_superseded) {
 TEST_F(CApi, proj_create_operations_with_pivot) {
 
     auto source_crs = proj_create_from_database(
-        m_ctxt, "EPSG", "4326", PJ_CATEGORY_CRS, false, nullptr); // WGS84
+        m_ctxt, "EPSG", "4230", PJ_CATEGORY_CRS, false, nullptr); // ED50
     ASSERT_NE(source_crs, nullptr);
     ObjectKeeper keeper_source_crs(source_crs);
 
     auto target_crs = proj_create_from_database(
-        m_ctxt, "EPSG", "6668", PJ_CATEGORY_CRS, false, nullptr); // JGD2011
+        m_ctxt, "EPSG", "4171", PJ_CATEGORY_CRS, false, nullptr); // RGF93 v1
     ASSERT_NE(target_crs, nullptr);
     ObjectKeeper keeper_target_crs(target_crs);
 
@@ -1821,7 +1825,7 @@ TEST_F(CApi, proj_create_operations_with_pivot) {
         EXPECT_EQ(
             proj_get_name(op),
             std::string(
-                "Inverse of JGD2000 to WGS 84 (1) + JGD2000 to JGD2011 (2)"));
+                "ED50 to ETRS89 (10) + Inverse of RGF93 v1 to ETRS89 (1)"));
     }
 
     // Disallow pivots
@@ -1842,27 +1846,23 @@ TEST_F(CApi, proj_create_operations_with_pivot) {
 
         EXPECT_EQ(
             proj_get_name(op),
-            std::string("Ballpark geographic offset from WGS 84 to JGD2011"));
+            std::string("Ballpark geographic offset from ED50 to RGF93 v1"));
     }
 
-    // Restrict pivot to Tokyo CRS
+    // Restrict pivot to ETRS89
     {
         auto ctxt = proj_create_operation_factory_context(m_ctxt, "EPSG");
         ASSERT_NE(ctxt, nullptr);
         ContextKeeper keeper_ctxt(ctxt);
 
-        const char *pivots[] = {"EPSG", "4301", nullptr};
+        const char *pivots[] = {"EPSG", "4258", nullptr};
         proj_operation_factory_context_set_allowed_intermediate_crs(
             m_ctxt, ctxt, pivots);
-        proj_operation_factory_context_set_spatial_criterion(
-            m_ctxt, ctxt, PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION);
-        proj_operation_factory_context_set_grid_availability_use(
-            m_ctxt, ctxt, PROJ_GRID_AVAILABILITY_IGNORED);
 
         auto res = proj_create_operations(m_ctxt, source_crs, target_crs, ctxt);
         ASSERT_NE(res, nullptr);
         ObjListKeeper keeper_res(res);
-        EXPECT_EQ(proj_list_get_count(res), 8);
+        EXPECT_EQ(proj_list_get_count(res), 1);
         auto op = proj_list_get(m_ctxt, res, 0);
         ASSERT_NE(op, nullptr);
         ObjectKeeper keeper_op(op);
@@ -1870,38 +1870,32 @@ TEST_F(CApi, proj_create_operations_with_pivot) {
         EXPECT_EQ(
             proj_get_name(op),
             std::string(
-                "Inverse of Tokyo to WGS 84 (108) + Tokyo to JGD2011 (2)"));
+                "ED50 to ETRS89 (10) + Inverse of RGF93 v1 to ETRS89 (1)"));
     }
 
-    // Restrict pivot to JGD2000
+    // Restrict pivot to something unrelated
     {
         auto ctxt = proj_create_operation_factory_context(m_ctxt, "any");
         ASSERT_NE(ctxt, nullptr);
         ContextKeeper keeper_ctxt(ctxt);
 
-        const char *pivots[] = {"EPSG", "4612", nullptr};
+        const char *pivots[] = {"EPSG", "4267", nullptr}; // NAD27
         proj_operation_factory_context_set_allowed_intermediate_crs(
             m_ctxt, ctxt, pivots);
-        proj_operation_factory_context_set_spatial_criterion(
-            m_ctxt, ctxt, PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION);
-        proj_operation_factory_context_set_grid_availability_use(
-            m_ctxt, ctxt, PROJ_GRID_AVAILABILITY_IGNORED);
         proj_operation_factory_context_set_allow_use_intermediate_crs(
             m_ctxt, ctxt, PROJ_INTERMEDIATE_CRS_USE_ALWAYS);
 
         auto res = proj_create_operations(m_ctxt, source_crs, target_crs, ctxt);
         ASSERT_NE(res, nullptr);
         ObjListKeeper keeper_res(res);
-        // includes results from ESRI
-        EXPECT_EQ(proj_list_get_count(res), 4);
+        EXPECT_EQ(proj_list_get_count(res), 1);
         auto op = proj_list_get(m_ctxt, res, 0);
         ASSERT_NE(op, nullptr);
         ObjectKeeper keeper_op(op);
 
         EXPECT_EQ(
             proj_get_name(op),
-            std::string(
-                "Inverse of JGD2000 to WGS 84 (1) + JGD2000 to JGD2011 (2)"));
+            std::string("Ballpark geographic offset from ED50 to RGF93 v1"));
     }
 }
 
@@ -2106,7 +2100,7 @@ TEST_F(CApi, proj_context_guess_wkt_dialect) {
 
 TEST_F(CApi, proj_create_from_name) {
     /*
-        PJ_OBJ_LIST PROJ_DLL *proj_create_from_name(
+        PJ_OBJ_LIST *proj_create_from_name(
             PJ_CONTEXT *ctx,
             const char *auth_name,
             const char *searchedName,
@@ -3793,22 +3787,27 @@ TEST_F(CApi, proj_get_crs_info_list_from_database) {
         params->typesCount = 1;
         auto type = PJ_TYPE_GEODETIC_CRS;
         params->types = &type;
-        auto list = proj_get_crs_info_list_from_database(m_ctxt, "EPSG", params,
-                                                         &result_count);
+        auto list = proj_get_crs_info_list_from_database(m_ctxt, nullptr,
+                                                         params, &result_count);
         bool foundGeog2D = false;
         bool foundGeog3D = false;
         bool foundGeocentric = false;
+        bool foundGeodeticCRS =
+            false; // for now, only -ocentric ellipsoidal IAU CRS
         for (int i = 0; i < result_count; i++) {
             foundGeog2D |= list[i]->type == PJ_TYPE_GEOGRAPHIC_2D_CRS;
             foundGeog3D |= list[i]->type == PJ_TYPE_GEOGRAPHIC_3D_CRS;
             foundGeocentric |= list[i]->type == PJ_TYPE_GEOCENTRIC_CRS;
+            foundGeodeticCRS |= list[i]->type == PJ_TYPE_GEODETIC_CRS;
             EXPECT_TRUE(list[i]->type == PJ_TYPE_GEOGRAPHIC_2D_CRS ||
                         list[i]->type == PJ_TYPE_GEOGRAPHIC_3D_CRS ||
-                        list[i]->type == PJ_TYPE_GEOCENTRIC_CRS);
+                        list[i]->type == PJ_TYPE_GEOCENTRIC_CRS ||
+                        list[i]->type == PJ_TYPE_GEODETIC_CRS);
         }
         EXPECT_TRUE(foundGeog2D);
         EXPECT_TRUE(foundGeog3D);
         EXPECT_TRUE(foundGeocentric);
+        EXPECT_TRUE(foundGeodeticCRS);
         proj_get_crs_list_parameters_destroy(params);
         proj_crs_info_list_destroy(list);
     }
@@ -5716,6 +5715,7 @@ TEST_F(CApi, proj_get_geoid_models_from_database) {
     ListFreer freer(list);
     EXPECT_TRUE(findInList(list, "GEOID12B"));
     EXPECT_TRUE(findInList(list, "GEOID18"));
+    EXPECT_TRUE(findInList(list, "GGM10"));
     EXPECT_FALSE(findInList(list, "OSGM15"));
 }
 
@@ -6103,9 +6103,18 @@ TEST_F(CApi, open_plenty_of_contexts) {
     // database
     std::vector<FILE *> dummyFilePointers;
     std::vector<PJ_CONTEXT *> ctxts;
-    // 1024 is the number of file descriptors that can be opened simultaneously
-    // by a Linux process (by default)
-    for (int i = 0; i < 1024 - 50; i++) {
+    // The number of file descriptors that can be opened simultaneously by a
+    // process varies across platforms so we make use of getrlimit(2) to
+    // retrieve it.
+    struct rlimit open_max;
+    getrlimit(RLIMIT_NOFILE, &open_max);
+    // On some platforms fopen returned nullptrs before reaching limit - 50, we
+    // can avoid this by capping the limit to 1024.
+    if (open_max.rlim_cur > 1024) {
+        open_max.rlim_cur = 1024;
+        setrlimit(RLIMIT_NOFILE, &open_max);
+    }
+    for (rlim_t i = 0; i < open_max.rlim_cur - 50; i++) {
         FILE *f = fopen("/dev/null", "rb");
         ASSERT_TRUE(f != nullptr);
         dummyFilePointers.push_back(f);
