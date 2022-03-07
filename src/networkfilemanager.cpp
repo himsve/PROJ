@@ -30,6 +30,11 @@
 #endif
 #define LRU11_DO_NOT_DEFINE_OUT_OF_CLASS_METHODS
 
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
+// For usleep() on Cygwin
+#define _GNU_SOURCE
+#endif
+
 #include <stdlib.h>
 
 #include <algorithm>
@@ -40,24 +45,9 @@
 #include "proj.h"
 #include "proj/internal/internal.hpp"
 #include "proj/internal/lru_cache.hpp"
+#include "proj/internal/mutex.hpp"
 #include "proj_internal.h"
 #include "sqlite3_utils.hpp"
-
-#ifdef __MINGW32__
-// mingw32-win32 doesn't implement std::mutex
-namespace {
-class MyMutex {
-  public:
-    // cppcheck-suppress functionStatic
-    void lock() { pj_acquire_lock(); }
-    // cppcheck-suppress functionStatic
-    void unlock() { pj_release_lock(); }
-};
-} // namespace
-#else
-#include <mutex>
-#define MyMutex std::mutex
-#endif
 
 #ifdef CURL_ENABLED
 #include <curl/curl.h>
@@ -152,7 +142,7 @@ class NetworkChunkCache {
     };
 
     lru11::Cache<
-        Key, std::shared_ptr<std::vector<unsigned char>>, MyMutex,
+        Key, std::shared_ptr<std::vector<unsigned char>>, NS_PROJ::mutex,
         std::unordered_map<
             Key,
             typename std::list<lru11::KeyValuePair<
@@ -176,7 +166,7 @@ class NetworkFilePropertiesCache {
     void clearMemoryCache();
 
   private:
-    lru11::Cache<std::string, FileProperties, MyMutex> cache_{};
+    lru11::Cache<std::string, FileProperties, NS_PROJ::mutex> cache_{};
 };
 
 // ---------------------------------------------------------------------------
@@ -1200,7 +1190,7 @@ bool NetworkFilePropertiesCache::tryGet(PJ_CONTEXT *ctx, const std::string &url,
     if (stmt->execute() != SQLITE_ROW) {
         return false;
     }
-    props.lastChecked = stmt->getInt64();
+    props.lastChecked = static_cast<time_t>(stmt->getInt64());
     props.size = stmt->getInt64();
     const char *lastModified = stmt->getText();
     props.lastModified = lastModified ? lastModified : std::string();
@@ -2092,8 +2082,6 @@ int proj_context_is_network_enabled(PJ_CONTEXT *ctx) {
     return ctx->networking.enabled;
 }
 
-//! @endcond
-
 // ---------------------------------------------------------------------------
 
 /** Define the URL endpoint to query for remote grids.
@@ -2280,7 +2268,7 @@ int proj_is_download_needed(PJ_CONTEXT *ctx, const char *url_or_filename,
     }
 
     NS_PROJ::FileProperties cachedProps;
-    cachedProps.lastChecked = stmt->getInt64();
+    cachedProps.lastChecked = static_cast<time_t>(stmt->getInt64());
     cachedProps.size = stmt->getInt64();
     const char *lastModified = stmt->getText();
     cachedProps.lastModified = lastModified ? lastModified : std::string();

@@ -155,6 +155,12 @@ FSF's configuration procedure is used to ease installation of the PROJ system.
     Follow the CMake installation guide if you are not using a UNIX-like
     operating system.
 
+If you are building from the git repository you have to first run::
+
+    ./autogen.sh
+
+which will generate a ``configure`` script that can be used in the next step.
+
 The default destination path prefix for installed files is ``/usr/local``.
 Results from the installation script will be placed into subdirectories ``bin``,
 ``include``, ``lib``, and ``man/man1``. If this default path prefix
@@ -168,12 +174,6 @@ If another path prefix is required, then execute::
 
 In either case, the directory of the prefix path must exist and be writable by
 the installer.
-
-If you are building from the git repository you have to first run::
-
-    ./autogen.sh
-
-which will generate a configure script that can be used as described above.
 
 With the data files in place we can now build and install PROJ::
 
@@ -189,7 +189,7 @@ Tests are run with::
 With a successful install of PROJ we can now install data files using the
 :program:`projsync` utility::
 
-    projsync --system-directory
+    projsync --system-directory --all
 
 which will download all resource files currently available for PROJ. If less than
 the entire collection of resource files is needed the call to :program:`projsync`
@@ -322,33 +322,43 @@ CMake configure options
 Options to configure a CMake are provided using ``-D<var>=<value>``.
 All cached entries can be viewed using ``cmake -LAH`` from a build directory.
 
+.. option:: BUILD_APPS=ON
+
+    Build PROJ applications. Default is ON. Control the default value for
+    BUILD_CCT, BUILD_CS2CS, BUILD_GEOD, BUILD_GIE, BUILD_PROJ, BUILD_PROJINFO
+    and BUILD_PROJSYNC.
+    Note that changing its value after having configured once will not change
+    the value of the individual BUILD_CCT, ... options.
+
+    .. versionchanged:: 8.2
+
 .. option:: BUILD_CCT=ON
 
-    Build :ref:`cct`, default ON.
+    Build :ref:`cct`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_CS2CS=ON
 
-    Build :ref:`cs2cs`, default ON.
+    Build :ref:`cs2cs`,default is the value of BUILD_APPS.
 
 .. option:: BUILD_GEOD=ON
 
-    Build :ref:`geod`, default ON.
+    Build :ref:`geod`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_GIE=ON
 
-    Build :ref:`gie`, default ON.
+    Build :ref:`gie`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_PROJ=ON
 
-    Build :ref:`proj`, default ON.
+    Build :ref:`proj`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_PROJINFO=ON
 
-    Build :ref:`projinfo`, default ON.
+    Build :ref:`projinfo`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_PROJSYNC=ON
 
-    Build :ref:`projsync`, default ON.
+    Build :ref:`projsync`, default is the value of BUILD_APPS.
 
 .. option:: BUILD_SHARED_LIBS
 
@@ -454,6 +464,12 @@ All cached entries can be viewed using ``cmake -LAH`` from a build directory.
     ``libtiff.so``, ``tiff.lib``, or other name. A similar variable
     ``TIFF_LIBRARY_DEBUG`` can also be specified to a similar library for
     building Debug releases.
+
+.. option:: USE_CCACHE=OFF
+
+    Configure CMake to use `ccache <https://ccache.dev/>`_ (or
+    `clcache <https://github.com/frerich/clcache>`_ for MSVC)
+    to build C/C++ objects.
 
 
 Building on Windows with vcpkg and Visual Studio 2017 or 2019

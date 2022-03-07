@@ -51,10 +51,6 @@ endif()  # USE_EXTERNAL_GTEST
 # Build PROJ unit tests
 #
 
-if(MSVC AND BUILD_SHARED_LIBS)
-  add_definitions(-DPROJ_MSVC_DLL_IMPORT=1)
-endif()
-
 include_directories(${PROJ_SOURCE_DIR}/include)
 include_directories(${SQLITE3_INCLUDE_DIR})
 # Add the directory containing proj_config.h
@@ -166,10 +162,6 @@ add_executable(test_defmodel
 target_link_libraries(test_defmodel
   PRIVATE GTest::gtest
   PRIVATE ${PROJ_LIBRARIES})
-if(NLOHMANN_JSON STREQUAL "external")
-  target_compile_definitions(test_defmodel PRIVATE EXTERNAL_NLOHMANN_JSON)
-  target_link_libraries(test_defmodel PRIVATE nlohmann_json::nlohmann_json)
-endif()
 add_test(NAME test_defmodel COMMAND test_defmodel)
 set_property(TEST test_defmodel
   PROPERTY ENVIRONMENT ${PROJ_TEST_ENVIRONMENT})
@@ -180,10 +172,6 @@ add_executable(test_tinshift
 target_link_libraries(test_tinshift
   PRIVATE GTest::gtest
   PRIVATE ${PROJ_LIBRARIES})
-if(NLOHMANN_JSON STREQUAL "external")
-  target_compile_definitions(test_tinshift PRIVATE EXTERNAL_NLOHMANN_JSON)
-  target_link_libraries(test_tinshift PRIVATE nlohmann_json::nlohmann_json)
-endif()
 add_test(NAME test_tinshift COMMAND test_tinshift)
 set_property(TEST test_tinshift
   PROPERTY ENVIRONMENT ${PROJ_TEST_ENVIRONMENT})
@@ -197,3 +185,15 @@ target_link_libraries(test_misc
 add_test(NAME test_misc COMMAND test_misc)
 set_property(TEST test_misc
   PROPERTY ENVIRONMENT ${PROJ_TEST_ENVIRONMENT})
+
+if (USE_THREAD AND Threads_FOUND AND CMAKE_USE_PTHREADS_INIT)
+add_definitions(-DMUTEX_pthread)
+add_executable(test_fork
+  test_fork.c)
+target_link_libraries(test_fork
+  PRIVATE ${PROJ_LIBRARIES}
+  PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+add_test(NAME test_fork COMMAND test_fork)
+set_property(TEST test_fork
+  PROPERTY ENVIRONMENT ${PROJ_TEST_ENVIRONMENT})
+endif()

@@ -7,28 +7,28 @@
 # (See accompanying file LICENSE_1_0.txt or copy at
 # https://www.boost.org/LICENSE_1_0.txt)
 ################################################################################
-include(CheckIncludeFiles)
 include(CheckLibraryExists)
 include(CheckFunctionExists)
 
-# check needed include file
-check_include_files(dlfcn.h HAVE_DLFCN_H)
-check_include_files(inttypes.h HAVE_INTTYPES_H)
-check_include_files(memory.h HAVE_MEMORY_H)
-check_include_files(stdint.h HAVE_STDINT_H)
-check_include_files(stdlib.h HAVE_STDLIB_H)
-check_include_files(string.h HAVE_STRING_H)
-check_include_files(sys/stat.h HAVE_SYS_STAT_H)
-check_include_files(sys/types.h HAVE_SYS_TYPES_H)
-check_include_files(unistd.h HAVE_UNISTD_H)
-check_include_files("stdlib.h;stdarg.h;string.h;float.h" STDC_HEADERS)
+# if C flags have -Werror, temporarily remove these while running some checks
+string(FIND "${CMAKE_C_FLAGS}" "-Werror" FIND_WERROR)
+if(FIND_WERROR GREATER_EQUAL 0)
+  string(REPLACE "-Werror" "" _tmp_CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
+  set(_prev_CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  set(CMAKE_C_FLAGS "${_tmp_CMAKE_C_FLAGS}")
+endif()
 
+# check needed include file
 check_function_exists(localeconv HAVE_LOCALECONV)
 check_function_exists(strerror HAVE_STRERROR)
 if(NOT WIN32)
-    check_library_exists(dl dladdr "" HAVE_LIBDL)
-    # check libm need on unix
-    check_library_exists(m ceil "" HAVE_LIBM)
+  check_library_exists(dl dladdr "" HAVE_LIBDL)
+  check_library_exists(m exp "" HAVE_LIBM)
+endif()
+
+# restore CMAKE_C_FLAGS as before
+if(FIND_WERROR GREATER_EQUAL 0)
+  set(CMAKE_C_FLAGS "${_prev_CMAKE_C_FLAGS}")
 endif()
 
 set(PACKAGE "proj")

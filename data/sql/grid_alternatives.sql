@@ -134,7 +134,12 @@ VALUES
 -- Vertical grids
 ('RAC09.mnt','fr_ign_RAC09.tif','RAC09.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAC09.tif',1,1,NULL),
 ('RAF09.mnt','fr_ign_RAF09.tif','RAF09.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAF09.tif',1,1,NULL),
-('RAF18.tac','fr_ign_RAF18.tif','RAF18.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAF18.tif',1,1,NULL),
+('RAF18.mnt','fr_ign_RAF18.tif','RAF18.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAF18.tif',1,1,NULL),
+('RAF18b.mnt','fr_ign_RAF18b.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAF18b.tif',1,1,NULL),
+-- The following is a bit an abusive mapping. The ggf97a.txt is the one pointed for the "RGF93 v1 to NGF-IGN69 height" transformation
+-- but we have never ingested that grid. So we point to RAF18.mnt instead...
+-- If we didn't do this, we wouldn't get a grid at all, since RAF09 and RAF18 are now only available for RGF93 v2
+('ggf97a.txt','fr_ign_RAF18.tif','RAF18.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAF18.tif',1,1,NULL),
 ('gg10_gtbt.txt','fr_ign_RAGTBT2016.tif','RAGTBT2016.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAGTBT2016.tif',1,1,NULL),
 ('RAGTBT2016.mnt','fr_ign_RAGTBT2016.tif','RAGTBT2016.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RAGTBT2016.tif',1,1,NULL),
 ('gg10_ld.txt','fr_ign_RALD2016.tif','RALD2016.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/fr_ign_RALD2016.tif',1,1,NULL),
@@ -172,6 +177,9 @@ VALUES
 -- jp_gsi - Geospatial Information Authority of Japan
 ('jp_gsi_gsigeo2011.tif','jp_gsi_gsigeo2011.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/jp_gsi_gsigeo2011.tif',1,1,NULL),
 
+-- mx_inegi - Instituto Nacional de Estadística, Geografía e Informática (INEGI) Mexico
+('GGM10.txt','mx_inegi_ggm10.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/mx_inegi_ggm10.tif',1,1,NULL),
+
 -- nc_dittt - Gouvernement de Nouvelle Calédonie - DITTT
 ('Ranc08_Circe.mnt','nc_dittt_Ranc08_Circe.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/nc_dittt_Ranc08_Circe.tif',1,1,NULL),
 ('gr3dnc01b.mnt','nc_dittt_gr3dnc01b.tif',NULL,'GTiff','geocentricoffset',0,NULL,'https://cdn.proj.org/nc_dittt_gr3dnc01b.tif',1,1,NULL),
@@ -193,6 +201,7 @@ VALUES
 ('href2008a.gtx','no_kv_href2008a.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/no_kv_href2008a.tif',1,1,NULL),
 ('arcgp-2006-sk.bin','no_kv_arcgp-2006-sk.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/no_kv_arcgp-2006-sk.tif',1,1,NULL),
 ('no_kv_NKGETRF14_EPSG7922_2000.tif','no_kv_NKGETRF14_EPSG7922_2000.tif',NULL,'GTiff','geocentricoffset',0,NULL,'https://cdn.proj.org/no_kv_NKGETRF14_EPSG7922_2000.tif',1,1,NULL),
+('ChartDatum_above_Ellipsoid_EUREF89_v2021a.bin','no_kv_CD_above_Ell_ETRS89_v2021a.tif',NULL,'GTiff','vgridshift',0,NULL,'https://cdn.proj.org/no_kv_CD_above_Ell_ETRS89_v2021a.tif',1,1,NULL),
 ('no_kv_ETRS89NO_NGO48_TIN.json','no_kv_ETRS89NO_NGO48_TIN.json',NULL,'JSON','tinshift',0,NULL,'https://cdn.proj.org/no_kv_ETRS89NO_NGO48_TIN.json',1,1,NULL),
 
 -- nz_linz - New Zealand
@@ -231,6 +240,10 @@ VALUES
 ('stewartisland-1977-to-nzvd2016-conversion.csv','nz_linz_stisht1977-nzvd2016.tif','stisht1977-nzvd2016.gtx','GTiff','vgridshift',0,NULL,'https://cdn.proj.org/nz_linz_stisht1977-nzvd2016.tif',1,1,NULL),
 ('taranaki-1970-to-nzvd2016-conversion.csv','nz_linz_taraht1970-nzvd2016.tif','taraht1970-nzvd2016.gtx','GTiff','vgridshift',0,NULL,'https://cdn.proj.org/nz_linz_taraht1970-nzvd2016.tif',1,1,NULL),
 ('wellington-1953-to-nzvd2016-conversion.csv','nz_linz_wellht1953-nzvd2016.tif','wellht1953-nzvd2016.gtx','GTiff','vgridshift',0,NULL,'https://cdn.proj.org/nz_linz_wellht1953-nzvd2016.tif',1,1,NULL),
+
+-- pl_gugik - Główny Urząd Geodezji i Kartografii
+('gugik-geoid2011-PL-EVRF2007-NH.txt','pl_gugik_geoid2011-PL-EVRF2007-NH.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/pl_gugik_geoid2011-PL-EVRF2007-NH.tif',1,1,NULL),
+('gugik-geoid2011-PL-KRON86-NH.txt','pl_gugik_geoid2011-PL-KRON86-NH.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/pl_gugik_geoid2011-PL-KRON86-NH.tif',1,1,NULL),
 
 -- pt_dgt - DG Territorio
 ('DLx_ETRS89_geo.gsb','pt_dgt_DLx_ETRS89_geo.tif','DLx_ETRS89_geo.gsb','GTiff','hgridshift',0,NULL,'https://cdn.proj.org/pt_dgt_DLx_ETRS89_geo.tif',1,1,NULL),
@@ -294,6 +307,9 @@ VALUES
 ('g2012bs0.bin','us_noaa_g2012bs0.tif','g2012bs0.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/us_noaa_g2012bs0.tif',1,1,NULL),
 -- US GEOID18 height models
 ('g2018u0.bin','us_noaa_g2018u0.tif','g2018u0.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/us_noaa_g2018u0.tif',1,1,NULL),
-('g2018p0.bin','us_noaa_g2018p0.tif','g2018p0.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/us_noaa_g2018p0.tif',1,1,NULL)
+('g2018p0.bin','us_noaa_g2018p0.tif','g2018p0.gtx','GTiff','geoid_like',0,NULL,'https://cdn.proj.org/us_noaa_g2018p0.tif',1,1,NULL),
+
+-- za_cdngi - Chief Directorate: National Geospatial Information (CD:NGI) South Africa
+('SAGEOID2010.dat','za_cdngi_sageoid2010.tif',NULL,'GTiff','geoid_like',0,NULL,'https://cdn.proj.org/za_cdngi_sageoid2010.tif',1,1,NULL)
 ;
 

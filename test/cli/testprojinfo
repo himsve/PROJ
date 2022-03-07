@@ -78,6 +78,10 @@ echo "Testing projinfo -s EPSG:4230 -t EPSG:4258 --bbox 8,54.51,15.24,57.8 --sum
 $EXE -s EPSG:4230 -t EPSG:4258 --bbox 8,54.51,15.24,57.8 --summary >>${OUT}
 echo "" >>${OUT}
 
+echo "Testing projinfo -s EPSG:23031 -t EPSG:4326 --bbox -13.87,34.91,-7.24,41.88 --crs-extent-use none --summary" >> ${OUT}
+$EXE -s EPSG:23031 -t EPSG:4326 --bbox -13.87,34.91,-7.24,41.88 --crs-extent-use none --summary >>${OUT}
+echo "" >>${OUT}
+
 echo "Testing projinfo -s EPSG:4230 -t EPSG:4258 --area EPSG:3237 --summary" >> ${OUT}
 $EXE -s EPSG:4230 -t EPSG:4258 --area EPSG:3237 --summary >>${OUT}
 echo "" >>${OUT}
@@ -368,8 +372,8 @@ $EXE --list-crs projected --bbox -100,40,-90,41 --spatial-test intersects | grep
 echo "" >>${OUT}
 
 # Test case where --area has several matches
-echo 'Testing --list-crs projected --area France | grep "RGF93 / Lambert-93\|UTM zone 11N" | sort' >> ${OUT}
-$EXE --list-crs projected --area France | grep "RGF93 / Lambert-93\|UTM zone 11N" | sort >> ${OUT}
+echo 'Testing --list-crs projected --area France | grep "RGF93 v1 / Lambert-93\|UTM zone 11N" | sort' >> ${OUT}
+$EXE --list-crs projected --area France | grep "RGF93 v1 / Lambert-93\|UTM zone 11N" | sort >> ${OUT}
 echo "" >>${OUT}
 
 # do 'diff' with distribution results

@@ -1,8 +1,5 @@
 -- This file is hand generated.
 
-INSERT INTO "extent" VALUES('PROJ','EXTENT_UNKNOWN','Not specified','Not specified.',-90.0,90.0,-180.0,180.0,0);
-INSERT INTO "scope" VALUES('PROJ','SCOPE_UNKNOWN','Not known.',0);
-
 -- grid_alternatives entries created from existing ones
 
 INSERT INTO grid_alternatives(original_grid_name,
@@ -259,6 +256,8 @@ INSERT INTO "geoid_model" SELECT 'GEOID12B', auth_name, code FROM grid_transform
 INSERT INTO "geoid_model" SELECT 'GEOID18', auth_name, code FROM grid_transformation WHERE auth_name = 'EPSG' AND grid_name LIKE 'g2018%' AND deprecated = 0;
 
 INSERT INTO "geoid_model" SELECT 'OSGM15', auth_name, code FROM grid_transformation WHERE auth_name = 'EPSG' AND grid_name LIKE '%OSGM15%' AND deprecated = 0;
+
+INSERT INTO "geoid_model" SELECT 'GGM10', auth_name, code FROM grid_transformation WHERE auth_name = 'PROJ' AND grid_name LIKE 'GGM10.txt' AND deprecated = 0;
 
 ---- PROJ historic +datum aliases -----
 

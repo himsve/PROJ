@@ -77,8 +77,8 @@ copyright = u'1983-{0}'.format(now.year)
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
-version = '8.1.0'
-data_version = '1.5'
+version = '8.2.0'
+data_version = '1.8'
 
 # use same |release| as |version|
 release = version
@@ -196,16 +196,17 @@ html_favicon = '../images/favicon.png'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+htm_css_files = [
+    'theme_overrides.css',  # override wide tables in RTD theme
+]
+
 html_context = {
     'display_github': True,
     'theme_vcs_pageview_mode': 'edit',
     'github_user': 'OSGeo',
     'github_repo': 'PROJ',
     # TODO: edit when switching active branch
-    'github_version': '/8.0/docs/source/',
-    'css_files': [
-        '_static/theme_overrides.css',  # override wide tables in RTD theme
-    ],
+    'github_version': '8.2/docs/source/',
 }
 
 # Add any extra paths that contain custom files (such as robots.txt or
@@ -410,6 +411,9 @@ texinfo_documents = [
 
 breathe_projects = {
     "doxygen_api":"../build/xml/",
+}
+breathe_domain_by_extension = {
+    "h" : "c",
 }
 
 import redirects

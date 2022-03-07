@@ -83,11 +83,17 @@ chained calls starting out with a call to its 2D interface.
         direction = static_cast<PJ_DIRECTION>(-direction);
     switch (direction) {
         case PJ_FWD:
-            coo.xy = pj_fwd (coo.lp, P);
+        {
+            const auto xy = pj_fwd (coo.lp, P);
+            coo.xy = xy;
             return coo;
+        }
         case PJ_INV:
-            coo.lp = pj_inv (coo.xy, P);
+        {
+            const auto lp = pj_inv (coo.xy, P);
+            coo.lp = lp;
             return coo;
+        }
         case PJ_IDENT:
             break;
     }
@@ -110,11 +116,17 @@ chained calls starting out with a call to its 3D interface.
         direction = static_cast<PJ_DIRECTION>(-direction);
     switch (direction) {
         case PJ_FWD:
-            coo.xyz = pj_fwd3d (coo.lpz, P);
+        {
+            const auto xyz = pj_fwd3d (coo.lpz, P);
+            coo.xyz = xyz;
             return coo;
+        }
         case PJ_INV:
-            coo.lpz = pj_inv3d (coo.xyz, P);
+        {
+            const auto lpz = pj_inv3d (coo.xyz, P);
+            coo.lpz = lpz;
             return coo;
+        }
         case PJ_IDENT:
             break;
     }
@@ -314,6 +326,31 @@ argument string, args, and count its number of elements.
 }
 
 
+static void unquote_string(char* param_str) {
+
+    size_t len = strlen(param_str);
+    // Remove leading and terminating spaces after equal sign
+    const char* equal = strstr(param_str, "=\"");
+    if( equal && equal - param_str + 1 >= 2 && param_str[len-1] == '"' ) {
+        size_t dst = equal + 1 - param_str;
+        size_t src = dst + 1;
+        for( ; param_str[src]; dst++, src++)
+        {
+            if( param_str[src] == '"' ) {
+                if( param_str[src+1] == '"' ) {
+                    src++;
+                } else {
+                    break;
+                }
+            }
+            param_str[dst] = param_str[src];
+        }
+        param_str[dst] = '\0';
+    }
+
+}
+
+
 
 /*****************************************************************************/
 char **pj_trim_argv (size_t argc, char *args) {
@@ -337,7 +374,6 @@ It is the duty of the caller to free this array.
     if (0==argc)
         return nullptr;
 
-
     /* turn the input string into an array of strings */
     char** argv = (char **) calloc (argc, sizeof (char *));
     if (nullptr==argv)
@@ -347,6 +383,7 @@ It is the duty of the caller to free this array.
         char* str = argv[j];
         size_t nLen = strlen(str);
         i += nLen + 1;
+        unquote_string(str);
     }
     return argv;
 }
@@ -358,7 +395,11 @@ std::string pj_double_quote_string_param_if_needed(const std::string& str) {
     if( str.find(' ') == std::string::npos ) {
         return str;
     }
-    return '"' + replaceAll(str, "\"", "\"\"") + '"';
+    std::string ret;
+    ret += '"';
+    ret += replaceAll(str, "\"", "\"\"");
+    ret += '"';
+    return ret;
 }
 
 /*****************************************************************************/
@@ -371,7 +412,6 @@ Allocates, and returns, an array of char, large enough to hold a whitespace
 separated copy of the args in argv. It is the duty of the caller to free this
 array.
 ******************************************************************************/
-
     try
     {
         std::string s;

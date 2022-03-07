@@ -2582,6 +2582,9 @@ expect  -0.001796631 0.000904369
 accept  -200 -100
 expect  -0.001796631 -0.000904369
 
+accept  13000000 0
+expect  failure errno coord_transfm_outside_projection_domain
+
 -------------------------------------------------------------------------------
 operation +proj=laea +R=6400000
 -------------------------------------------------------------------------------
@@ -4528,6 +4531,87 @@ tolerance   0.1 mm
 accept      0               -6343600
 expect      0               -59.966377950099655436
 
+# At pole or very close to it
+direction   forward
+tolerance   0.1 mm
+accept      0              90
+expect      0              5523613.1150
+
+direction   inverse
+tolerance   0.1 mm
+accept      0              5523613.1150
+expect      0              90
+
+direction   forward
+tolerance   0.1 mm
+accept      0              89.99999999
+expect      0              5523613.1145
+roundtrip   1
+
+direction   forward
+tolerance   0.1 mm
+accept      180            89.99999999
+expect      0              5523613.1156
+roundtrip   1
+
+direction   forward
+tolerance   0.1 mm
+accept      90             89.99999999
+expect      0.0011         5523613.1150
+# Roundrip doesn't work on 32bit builds
+#roundtrip   1
+
+direction   forward
+tolerance   0.1 mm
+accept      -90            89.99999999
+expect      -0.0011        5523613.1150
+roundtrip   1
+
+# Southern hemisphere
+operation   +proj=ortho +ellps=WGS84 +lat_0=-30
+
+# At pole or very close to it
+direction   forward
+tolerance   0.1 mm
+accept      0              -90
+expect      0              -5523613.1150
+
+direction   inverse
+tolerance   0.1 mm
+accept      0              -5523613.1150
+expect      0              -90
+
+direction   forward
+tolerance   0.1 mm
+accept      0              -89.99999999
+expect      0              -5523613.1145
+roundtrip   1
+
+direction   forward
+tolerance   0.1 mm
+accept      180            -89.99999999
+expect      0              -5523613.1156
+roundtrip   1
+
+-------------------------------------------------------------------------------
+# Oblique
+# Test case from https://github.com/OSGeo/PROJ/issues/2844
+-------------------------------------------------------------------------------
+operation   +proj=ortho +ellps=WGS84 +lon_0=23.0 +lat_0=37.0
+tolerance   0.1 mm
+accept      120.0           84.0
+expect      663929.0678     5118338.2423
+roundtrip   1
+
+tolerance   0.1 mm
+accept      -132.1803037588 60.171013757
+expect      -1335097.4621   6158336.7476
+roundtrip   1
+
+tolerance   0.1 mm
+accept      171.66658585876 55.670679094
+expect      1874756.6327    6061693.5075
+roundtrip   1
 
 -------------------------------------------------------------------------------
 # Equatorial
@@ -5273,6 +5357,173 @@ expect  -223368.098302014 111769.110486991
 accept  -2 -1
 expect  -223368.098302014 -111769.110486991
 
+===============================================================================
+# S2
+# Input lats are converted from nice spherical values to
+# messy ellipsoidal lats e.g. 45 vs 45.1924232....
+===============================================================================
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=0 +lon_0=0 +UVtoST=linear
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept 0 0
+expect 0.5 0.5
+accept 0 45.19242321598196
+expect 0.5 1
+accept 0 -45.19242321598196
+expect 0.5 0
+accept -45 0
+expect 0 0.5
+accept 45 0
+expect 1 0.5
+accept  -45 -35.446011426401625
+expect  0 0
+accept  45 -35.446011426401625
+expect  1 0
+accept  45 35.446011426401625
+expect  1 1
+accept  -45 35.446011426401625
+expect  0 1
+accept 20 20.124006563576454
+expect 0.6819851171331012 0.6936645165744716
+accept 20 -20.124006563576454
+expect 0.6819851171331012 0.3063354834255284
+accept -20 -20.124006563576454
+expect 0.31801488286689883 0.3063354834255284
+accept -20 20.124006563576454
+expect 0.31801488286689883 0.6936645165744716
+
+direction inverse
+accept  0.5 0.5
+expect  0 0
+accept 0.5 1
+expect 0 45.19242321598196
+accept 0.5 0
+expect 0 -45.19242321598196
+accept 0 0.5
+expect -45 0
+accept 1 0.5
+expect 45 0
+accept 0 0
+expect -45 -35.446011426401625
+accept 1 0 
+expect 45 -35.446011426401625
+accept 1 1
+expect 45 35.446011426401625
+accept 0 1
+expect -45 35.446011426401625
+accept 0.6819851171331012 0.6936645165744716
+expect 20 20.124006563576454
+accept 0.6819851171331012 0.3063354834255284
+expect 20 -20.124006563576454
+accept 0.31801488286689883 0.3063354834255284
+expect -20 -20.124006563576454
+accept 0.31801488286689883 0.6936645165744716
+expect -20 20.124006563576454
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=0 +lon_0=90 +UVtoST=quadratic
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept 90 0
+expect 0.5 0.5
+accept 70 20.124006563576454
+expect 0.27682804555233764 0.7351848576118168
+accept 110 20.124006563576454
+expect 0.7231719544476624 0.7351848576118168
+
+direction inverse
+accept 0.5 0.5
+expect 90 0
+accept 0.27682804555233764 0.7351848576118168
+expect 70 20.124006563576454
+accept 0.7231719544476624 0.7351848576118168
+expect 110 20.124006563576454
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=90 +UVtoST=tangent
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept 0 90
+expect 0.5 0.5
+accept 20 70.12337013762532
+expect 0.29020309743436806 0.4211558922141421
+accept -20 70.12337013762532
+expect 0.29020309743436806 0.5788441077858579
+
+direction inverse
+accept 0.5 0.5
+expect 0 90
+accept 0.29020309743436806 0.4211558922141421
+expect 20 70.12337013762532
+accept 0.29020309743436806 0.5788441077858579
+expect -20 70.12337013762532
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=0 +lon_0=180 +UVtoST=none
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept 180 0
+expect 0 0
+accept 160 20.124006563576454
+expect -0.3873290331489431 -0.3639702342662023
+accept -160 20.124006563576454
+expect -0.3873290331489431 0.3639702342662023
+
+direction inverse
+accept 0 0
+expect 180 0
+accept -0.3873290331489431 -0.3639702342662023
+expect 160 20.124006563576454
+accept -0.3873290331489431 0.3639702342662023
+expect -160 20.124006563576454
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=0 +lon_0=-90
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept -90 0
+expect 0.5 0.5
+accept -70 20.124006563576454
+expect 0.26481514238818316 0.7231719544476624
+accept -110 20.124006563576454
+expect 0.26481514238818316 0.27682804555233764
+
+direction inverse
+accept 0.5 0.5
+expect -90 0
+accept 0.26481514238818316 0.7231719544476624
+expect -70 20.124006563576454
+accept 0.26481514238818316 0.27682804555233764
+expect -110 20.124006563576454
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=-90 +UVtoST=linear
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+accept 0 -90
+expect 0.5 0.5
+accept 20 -70.12337013762533
+expect 0.5622425758450019 0.6710100716628344
+accept -20 -70.12337013762533
+expect 0.4377574241549981 0.6710100716628344
+
+direction inverse
+accept 0.5 0.5
+expect 0 -90
+accept 0.5622425758450019 0.6710100716628344
+expect 20 -70.12337013762533
+accept 0.4377574241549981 0.6710100716628344
+expect -20 -70.12337013762533
+
+-------------------------------------------------------------------------------
+operation +proj=s2   +ellps=WGS84 +lat_0=0 +lon_0=0 +UVtoST=invalid
+-------------------------------------------------------------------------------
+tolerance 0.1 mm
+
+accept 0 0
+expect failure errno invalid_op_illegal_arg_value
 
 ===============================================================================
 # Sinusoidal (Sanson-Flamsteed)
@@ -5445,6 +5696,7 @@ accept    20            70
 expect    748315.3282   -2055979.4669
 roundtrip 1
 
+# Polar Stereographic Variant B, ellipsoidal
 -------------------------------------------------------------------------------
 operation +proj=stere   +ellps=GRS80        +lat_0=-90  +lat_ts=-70
 -------------------------------------------------------------------------------
@@ -5456,6 +5708,50 @@ roundtrip 1
 tolerance 0.1 mm
 accept    20            -70
 expect    748315.3282   2055979.4669
+roundtrip 1
+
+# Polar Stereographic Variant A, ellipsoidal
+-------------------------------------------------------------------------------
+operation +proj=stere   +ellps=GRS80       +lat_0=-90  +k_0=0.97
+-------------------------------------------------------------------------------
+tolerance 1e-15m
+accept    0 -90
+expect    0 0
+roundtrip 1
+
+tolerance 0.1 mm
+accept    20            -70
+expect    748424.7446   2056280.0858
+roundtrip 1
+
+# Polar Stereographic Variant B, spherical
+-------------------------------------------------------------------------------
+operation +proj=stere   +R=6378137        +lat_0=-90  +lat_ts=-70
+-------------------------------------------------------------------------------
+tolerance 1e-15m
+accept    0 -90
+expect    0 0
+roundtrip 1
+
+tolerance 0.1 mm
+accept    20            -70
+expect    746100.2968   2049893.7182
+roundtrip 1
+
+
+# Polar Stereographic Variant A, spherical
+# k_0 = (1 + math.sin(abs(lat_ts=-70) / 180. * math.pi)) / 2.0
+-------------------------------------------------------------------------------
+operation +proj=stere   +R=6378137        +lat_0=-90  +k_0=0.9698463103929542
+-------------------------------------------------------------------------------
+tolerance 1e-15m
+accept    0 -90
+expect    0 0
+roundtrip 1
+
+tolerance 0.1 mm
+accept    20            -70
+expect    746100.2968   2049893.7182
 roundtrip 1
 
 ===============================================================================

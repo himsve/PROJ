@@ -11,8 +11,4 @@ target_link_libraries(cs2cs PRIVATE ${PROJ_LIBRARIES})
 target_compile_options(cs2cs PRIVATE ${PROJ_CXX_WARN_FLAGS})
 
 install(TARGETS cs2cs
-  RUNTIME DESTINATION ${BINDIR})
-
-if(MSVC AND BUILD_SHARED_LIBS)
-  target_compile_definitions(cs2cs PRIVATE PROJ_MSVC_DLL_IMPORT=1)
-endif()
+  DESTINATION ${BINDIR})

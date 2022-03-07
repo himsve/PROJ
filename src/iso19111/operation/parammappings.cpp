@@ -561,6 +561,10 @@ static const MethodMapping projectionMethodMappings[] = {
     {EPSG_NAME_METHOD_TRANSVERSE_MERCATOR, EPSG_CODE_METHOD_TRANSVERSE_MERCATOR,
      "Transverse_Mercator", "tmerc", nullptr, paramsNatOriginScaleK},
 
+    {EPSG_NAME_METHOD_TRANSVERSE_MERCATOR_3D,
+     EPSG_CODE_METHOD_TRANSVERSE_MERCATOR_3D, "Transverse_Mercator", "tmerc",
+     nullptr, paramsNatOriginScaleK},
+
     {EPSG_NAME_METHOD_TRANSVERSE_MERCATOR_SOUTH_ORIENTATED,
      EPSG_CODE_METHOD_TRANSVERSE_MERCATOR_SOUTH_ORIENTATED,
      "Transverse_Mercator_South_Orientated", "tmerc", "axis=wsu",
@@ -597,11 +601,6 @@ static const MethodMapping projectionMethodMappings[] = {
     {EPSG_NAME_METHOD_LAMBERT_CONIC_CONFORMAL_2SP,
      EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_2SP,
      "Lambert_Conformal_Conic_2SP", "lcc", nullptr, paramsLCC2SP},
-
-    // Oracle WKT
-    {EPSG_NAME_METHOD_LAMBERT_CONIC_CONFORMAL_2SP,
-     EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_2SP, "Lambert Conformal Conic",
-     "lcc", nullptr, paramsLCC2SP},
 
     {EPSG_NAME_METHOD_LAMBERT_CONIC_CONFORMAL_2SP_MICHIGAN,
      EPSG_CODE_METHOD_LAMBERT_CONIC_CONFORMAL_2SP_MICHIGAN,
@@ -793,6 +792,12 @@ static const MethodMapping projectionMethodMappings[] = {
 
     {PROJ_WKT2_NAME_METHOD_ROBINSON, 0, "Robinson", "robin", nullptr,
      paramsLonNatOriginLongitudeCentre},
+
+    {PROJ_WKT2_NAME_METHOD_PEIRCE_QUINCUNCIAL_SQUARE, 0, nullptr, "peirce_q",
+     "shape=square", paramsNatOriginScale},
+
+    {PROJ_WKT2_NAME_METHOD_PEIRCE_QUINCUNCIAL_DIAMOND, 0, nullptr, "peirce_q",
+     "shape=diamond", paramsNatOriginScale},
 
     {PROJ_WKT2_NAME_METHOD_SINUSOIDAL, 0, "Sinusoidal", "sinu", nullptr,
      paramsLonNatOriginLongitudeCentre},
@@ -1305,6 +1310,22 @@ static const ParamMapping *const paramsPoleRotationGRIBConvention[] = {
     &paramSouthPoleLatGRIB, &paramSouthPoleLonGRIB, &paramAxisRotationGRIB,
     nullptr};
 
+static const ParamMapping paramGridNorthPoleLatitudeNetCDF = {
+    PROJ_WKT2_NAME_PARAMETER_GRID_NORTH_POLE_LATITUDE_NETCDF_CONVENTION, 0,
+    nullptr, common::UnitOfMeasure::Type::ANGULAR, nullptr};
+
+static const ParamMapping paramGridNorthPoleLongitudeNetCDF = {
+    PROJ_WKT2_NAME_PARAMETER_GRID_NORTH_POLE_LONGITUDE_NETCDF_CONVENTION, 0,
+    nullptr, common::UnitOfMeasure::Type::ANGULAR, nullptr};
+
+static const ParamMapping paramNorthPoleGridLongitudeNetCDF = {
+    PROJ_WKT2_NAME_PARAMETER_NORTH_POLE_GRID_LONGITUDE_NETCDF_CONVENTION, 0,
+    nullptr, common::UnitOfMeasure::Type::ANGULAR, nullptr};
+
+static const ParamMapping *const paramsPoleRotationNetCDFCFConvention[] = {
+    &paramGridNorthPoleLatitudeNetCDF, &paramGridNorthPoleLongitudeNetCDF,
+    &paramNorthPoleGridLongitudeNetCDF, nullptr};
+
 static const MethodMapping otherMethodMappings[] = {
     {EPSG_NAME_METHOD_CHANGE_VERTICAL_UNIT,
      EPSG_CODE_METHOD_CHANGE_VERTICAL_UNIT, nullptr, nullptr, nullptr,
@@ -1324,6 +1345,8 @@ static const MethodMapping otherMethodMappings[] = {
     {EPSG_NAME_METHOD_GEOGRAPHIC_GEOCENTRIC,
      EPSG_CODE_METHOD_GEOGRAPHIC_GEOCENTRIC, nullptr, nullptr, nullptr,
      nullptr},
+    {PROJ_WKT2_NAME_METHOD_GEOGRAPHIC_GEOCENTRIC_LATITUDE, 0, nullptr, nullptr,
+     nullptr, nullptr},
     {EPSG_NAME_METHOD_LONGITUDE_ROTATION, EPSG_CODE_METHOD_LONGITUDE_ROTATION,
      nullptr, nullptr, nullptr, paramsLongitudeRotation},
     {EPSG_NAME_METHOD_AFFINE_PARAMETRIC_TRANSFORMATION,
@@ -1332,6 +1355,9 @@ static const MethodMapping otherMethodMappings[] = {
 
     {PROJ_WKT2_NAME_METHOD_POLE_ROTATION_GRIB_CONVENTION, 0, nullptr, nullptr,
      nullptr, paramsPoleRotationGRIBConvention},
+
+    {PROJ_WKT2_NAME_METHOD_POLE_ROTATION_NETCDF_CF_CONVENTION, 0, nullptr,
+     nullptr, nullptr, paramsPoleRotationNetCDFCFConvention},
 
     {EPSG_NAME_METHOD_GEOCENTRIC_TRANSLATION_GEOCENTRIC,
      EPSG_CODE_METHOD_GEOCENTRIC_TRANSLATION_GEOCENTRIC, nullptr, nullptr,

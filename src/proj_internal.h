@@ -573,6 +573,9 @@ struct PJconsts {
     mutable bool gridsNeededAsked = false;
     mutable std::vector<NS_PROJ::operation::GridDescription> gridsNeeded{};
 
+    // cache pj_get_type() result to help for repeated calls to proj_factors()
+    mutable PJ_TYPE type = PJ_TYPE_UNKNOWN;
+
     /*************************************************************************************
      proj_create_crs_to_crs() alternative coordinate operations
     **************************************************************************************/
@@ -683,6 +686,7 @@ struct pj_ctx{
     void    *logger_app_data = nullptr;
     struct projCppContext* cpp_context = nullptr; /* internal context for C++ code */
     int     use_proj4_init_rules = -1; /* -1 = unknown, 0 = no, 1 = yes */
+    bool     forceOver = false; 
     int     epsg_file_exists = -1; /* -1 = unknown, 0 = no, 1 = yes */
     std::string ca_bundle_path{};
 
@@ -719,7 +723,6 @@ struct pj_ctx{
     pj_ctx& operator= (const pj_ctx&) = delete;
 
     projCppContext* get_cpp_context();
-    void safeAutoCloseDbIfNeeded();
     void set_search_paths(const std::vector<std::string>& search_paths_in);
     void set_ca_bundle_path(const std::string& ca_bundle_path_in);
 
@@ -868,6 +871,8 @@ const PJ_UNITS *pj_list_angular_units();
 void pj_clear_hgridshift_knowngrids_cache();
 void pj_clear_vgridshift_knowngrids_cache();
 
+void pj_clear_sqlite_cache();
+
 PJ_LP pj_generic_inverse_2d(PJ_XY xy, PJ *P, PJ_LP lpInitial);
 
 
@@ -917,6 +922,7 @@ void pj_acquire_lock(void);
 void pj_release_lock(void);
 void pj_cleanup_lock(void);
 
+bool pj_log_active( PJ_CONTEXT *ctx, int level );
 void pj_log( PJ_CONTEXT * ctx, int level, const char *fmt, ... );
 void pj_stderr_logger( void *, int, const char * );
 

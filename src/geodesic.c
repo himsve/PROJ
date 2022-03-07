@@ -56,7 +56,7 @@ static unsigned digits, maxit1, maxit2;
 static real epsilon, realmin, pi, degree, NaN,
   tiny, tol0, tol1, tol2, tolb, xthresh;
 
-static void Init() {
+static void Init(void) {
   if (!init) {
     digits = DBL_MANT_DIG;
     epsilon = DBL_EPSILON;
@@ -210,6 +210,7 @@ static real atan2dx(real y, real x) {
   case 1: ang = (y >= 0 ? 180 : -180) - ang; break;
   case 2: ang =  90 - ang; break;
   case 3: ang = -90 + ang; break;
+  default: break;
   }
   return ang;
 }
@@ -592,8 +593,8 @@ real geod_genposition(const struct geod_geodesicline* l,
    *   if ((outmask & GEOD_XX) && pYY)
    *     *pYY = YY;
    *
-   * the second check "&& pYY" is redundant.  It's there to make the CLang
-   * static analyzer happy.
+   * the second check "&& pYY" is redundant.  It's there to make the Clang
+   * Static Analyzer happy.
    */
   if ((outmask & GEOD_LATITUDE) && plat2)
     *plat2 = lat2;
@@ -1825,7 +1826,7 @@ void geod_polygon_addedge(const struct geod_geodesic* g,
                           real azi, real s) {
   if (p->num) {              /* Do nothing is num is zero */
     /* Initialize S12 to stop Visual Studio warning.  Initialization of lat and
-     * lon is to make CLang static analyzer happy. */
+     * lon is to make Clang Static Analyzer happy. */
     real lat = 0, lon = 0, S12 = 0;
     geod_gendirect(g, p->lat, p->lon, azi, GEOD_LONG_UNROLL, s,
                    &lat, &lon, nullptr,
@@ -1927,7 +1928,7 @@ unsigned geod_polygon_testedge(const struct geod_geodesic* g,
   tempsum = p->A[0];
   crossings = p->crossings;
   {
-    /* Initialization of lat, lon, and S12 is to make CLang static analyzer
+    /* Initialization of lat, lon, and S12 is to make Clang Static Analyzer
      * happy. */
     real lat = 0, lon = 0, s12, S12 = 0;
     geod_gendirect(g, p->lat, p->lon, azi, GEOD_LONG_UNROLL, s,

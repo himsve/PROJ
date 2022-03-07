@@ -153,20 +153,7 @@ projCppContext::toVector(const char *const *auxDbPaths) {
 projCppContext *projCppContext::clone(PJ_CONTEXT *ctx) const {
     projCppContext *newContext =
         new projCppContext(ctx, getDbPath().c_str(), getAuxDbPaths());
-    newContext->setAutoCloseDb(getAutoCloseDb());
     return newContext;
-}
-
-// ---------------------------------------------------------------------------
-
-void projCppContext::closeDb() { databaseContext_ = nullptr; }
-
-// ---------------------------------------------------------------------------
-
-void projCppContext::autoCloseDbIfNeeded() {
-    if (getAutoCloseDb()) {
-        closeDb();
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +202,6 @@ static PJ *pj_obj_create(PJ_CONTEXT *ctx, const IdentifiedObjectNNPtr &objIn) {
             ctx->defer_grid_opening = false;
             if (pj) {
                 pj->iso_obj = objIn;
-                ctx->safeAutoCloseDbIfNeeded();
                 return pj;
             }
         } catch (const std::exception &) {
@@ -236,6 +222,13 @@ static PJ *pj_obj_create(PJ_CONTEXT *ctx, const IdentifiedObjectNNPtr &objIn) {
                     const auto &ellps = geodCRS->ellipsoid();
                     const double a = ellps->semiMajorAxis().getSIValue();
                     const double es = ellps->squaredEccentricity();
+                    if (!(a > 0 && es >= 0 && es < 1)) {
+                        proj_log_error(pj, _("Invalid ellipsoid parameters"));
+                        proj_errno_set(pj,
+                                       PROJ_ERR_INVALID_OP_ILLEGAL_ARG_VALUE);
+                        proj_destroy(pj);
+                        return nullptr;
+                    }
                     pj_calc_ellipsoid_params(pj, a, es);
                     assert(pj->geod == nullptr);
                     pj->geod = static_cast<struct geod_geodesic *>(
@@ -249,7 +242,6 @@ static PJ *pj_obj_create(PJ_CONTEXT *ctx, const IdentifiedObjectNNPtr &objIn) {
         } catch (const std::exception &) {
         }
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return pj;
 }
 //! @endcond
@@ -289,19 +281,19 @@ PJ_OBJ_LIST::~PJ_OBJ_LIST() = default;
 
 // ---------------------------------------------------------------------------
 
-/** \brief Set if the database must be closed after each C API call where it
- * has been opened, and automatically re-opened when needed.
+/** \brief Starting with PROJ 8.1, this function does nothing.
  *
- * The default value is FALSE, that is the database remains open until the
- * context is destroyed.
+ * If you want to take into account changes to the PROJ database, you need to
+ * re-create a new context.
  *
- * @param ctx PROJ context, or NULL for default context
- * @param autoclose Boolean parameter
+ * @param ctx Ignored
+ * @param autoclose Ignored
  * @since 6.2
+ * @deprecated Since 8.1
  */
 void proj_context_set_autoclose_database(PJ_CONTEXT *ctx, int autoclose) {
-    SANITIZE_CTX(ctx);
-    ctx->get_cpp_context()->setAutoCloseDb(autoclose != FALSE);
+    (void)ctx;
+    (void)autoclose;
 }
 
 // ---------------------------------------------------------------------------
@@ -330,27 +322,22 @@ int proj_context_set_database_path(PJ_CONTEXT *ctx, const char *dbPath,
     (void)options;
     std::string osPrevDbPath;
     std::vector<std::string> osPrevAuxDbPaths;
-    bool autoCloseDb = false;
     if (ctx->cpp_context) {
         osPrevDbPath = ctx->cpp_context->getDbPath();
         osPrevAuxDbPaths = ctx->cpp_context->getAuxDbPaths();
-        autoCloseDb = ctx->cpp_context->getAutoCloseDb();
     }
     delete ctx->cpp_context;
     ctx->cpp_context = nullptr;
     try {
         ctx->cpp_context = new projCppContext(
             ctx, dbPath, projCppContext::toVector(auxDbPaths));
-        ctx->cpp_context->setAutoCloseDb(autoCloseDb);
         ctx->cpp_context->getDatabaseContext();
-        ctx->safeAutoCloseDbIfNeeded();
         return true;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
         delete ctx->cpp_context;
         ctx->cpp_context =
             new projCppContext(ctx, osPrevDbPath.c_str(), osPrevAuxDbPaths);
-        ctx->cpp_context->setAutoCloseDb(autoCloseDb);
         return false;
     }
 }
@@ -372,7 +359,6 @@ const char *proj_context_get_database_path(PJ_CONTEXT *ctx) {
         // ctx->cpp_context
         auto osPath(getDBcontext(ctx)->getPath());
         ctx->get_cpp_context()->lastDbPath_ = osPath;
-        ctx->safeAutoCloseDbIfNeeded();
         return ctx->cpp_context->lastDbPath_.c_str();
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -386,6 +372,24 @@ const char *proj_context_get_database_path(PJ_CONTEXT *ctx) {
  *
  * The returned pointer remains valid while ctx is valid, and until
  * proj_context_get_database_metadata() is called.
+ *
+ * Available keys:
+ *
+ * - DATABASE.LAYOUT.VERSION.MAJOR
+ * - DATABASE.LAYOUT.VERSION.MINOR
+ * - EPSG.VERSION
+ * - EPSG.DATE
+ * - ESRI.VERSION
+ * - ESRI.DATE
+ * - IGNF.SOURCE
+ * - IGNF.VERSION
+ * - IGNF.DATE
+ * - NKG.SOURCE
+ * - NKG.VERSION
+ * - NKG.DATE
+ * - PROJ.VERSION
+ * - PROJ_DATA.VERSION : PROJ-data version most compatible with this database.
+ *
  *
  * @param ctx PROJ context, or NULL for default context
  * @param key Metadata key. Must not be NULL
@@ -404,11 +408,9 @@ const char *proj_context_get_database_metadata(PJ_CONTEXT *ctx,
         // ctx->cpp_context
         auto osVal(getDBcontext(ctx)->getMetadata(key));
         if (osVal == nullptr) {
-            ctx->safeAutoCloseDbIfNeeded();
             return nullptr;
         }
         ctx->get_cpp_context()->lastDbMetadataItem_ = osVal;
-        ctx->safeAutoCloseDbIfNeeded();
         return ctx->cpp_context->lastDbMetadataItem_.c_str();
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -437,7 +439,6 @@ proj_context_get_database_structure(PJ_CONTEXT *ctx,
     (void)options;
     try {
         auto ret = to_string_list(getDBcontext(ctx)->getDatabaseStructure());
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -574,7 +575,6 @@ PJ *proj_create(PJ_CONTEXT *ctx, const char *text) {
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -697,7 +697,6 @@ PJ *proj_create_from_wkt(PJ_CONTEXT *ctx, const char *wkt,
             proj_log_error(ctx, __FUNCTION__, e.what());
         }
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -762,7 +761,6 @@ PJ *proj_create_from_database(PJ_CONTEXT *ctx, const char *auth_name,
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -848,12 +846,10 @@ int proj_uom_get_info_from_database(PJ_CONTEXT *ctx, const char *auth_name,
         if (out_category) {
             *out_category = get_unit_category(obj->name(), obj->type());
         }
-        ctx->safeAutoCloseDbIfNeeded();
         return true;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return false;
 }
 
@@ -878,7 +874,7 @@ int proj_uom_get_info_from_database(PJ_CONTEXT *ctx, const char *auth_name,
  * grid is available at runtime. or NULL
  * @return TRUE in case of success.
  */
-int PROJ_DLL proj_grid_get_info_from_database(
+int proj_grid_get_info_from_database(
     PJ_CONTEXT *ctx, const char *grid_name, const char **out_full_name,
     const char **out_package_name, const char **out_url,
     int *out_direct_download, int *out_open_license, int *out_available) {
@@ -898,7 +894,6 @@ int PROJ_DLL proj_grid_get_info_from_database(
                 ctx->get_cpp_context()->lastGridPackageName_,
                 ctx->get_cpp_context()->lastGridUrl_, direct_download,
                 open_license, available)) {
-            ctx->safeAutoCloseDbIfNeeded();
             return false;
         }
 
@@ -916,12 +911,10 @@ int PROJ_DLL proj_grid_get_info_from_database(
         if (out_available)
             *out_available = available ? 1 : 0;
 
-        ctx->safeAutoCloseDbIfNeeded();
         return true;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return false;
 }
 
@@ -957,12 +950,10 @@ PJ_OBJ_LIST *proj_query_geodetic_crs_from_datum(PJ_CONTEXT *ctx,
         for (const auto &obj : res) {
             objects.push_back(obj);
         }
-        ctx->safeAutoCloseDbIfNeeded();
         return new PJ_OBJ_LIST(std::move(objects));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -1141,12 +1132,10 @@ PJ_OBJ_LIST *proj_create_from_name(PJ_CONTEXT *ctx, const char *auth_name,
         for (const auto &obj : res) {
             objects.push_back(obj);
         }
-        ctx->safeAutoCloseDbIfNeeded();
         return new PJ_OBJ_LIST(std::move(objects));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -1161,98 +1150,106 @@ PJ_TYPE proj_get_type(const PJ *obj) {
     if (!obj || !obj->iso_obj) {
         return PJ_TYPE_UNKNOWN;
     }
-    auto ptr = obj->iso_obj.get();
-    if (dynamic_cast<Ellipsoid *>(ptr)) {
-        return PJ_TYPE_ELLIPSOID;
-    }
+    if (obj->type != PJ_TYPE_UNKNOWN)
+        return obj->type;
 
-    if (dynamic_cast<PrimeMeridian *>(ptr)) {
-        return PJ_TYPE_PRIME_MERIDIAN;
-    }
+    const auto getType = [&obj]() {
+        auto ptr = obj->iso_obj.get();
+        if (dynamic_cast<Ellipsoid *>(ptr)) {
+            return PJ_TYPE_ELLIPSOID;
+        }
 
-    if (dynamic_cast<DynamicGeodeticReferenceFrame *>(ptr)) {
-        return PJ_TYPE_DYNAMIC_GEODETIC_REFERENCE_FRAME;
-    }
-    if (dynamic_cast<GeodeticReferenceFrame *>(ptr)) {
-        return PJ_TYPE_GEODETIC_REFERENCE_FRAME;
-    }
-    if (dynamic_cast<DynamicVerticalReferenceFrame *>(ptr)) {
-        return PJ_TYPE_DYNAMIC_VERTICAL_REFERENCE_FRAME;
-    }
-    if (dynamic_cast<VerticalReferenceFrame *>(ptr)) {
-        return PJ_TYPE_VERTICAL_REFERENCE_FRAME;
-    }
-    if (dynamic_cast<DatumEnsemble *>(ptr)) {
-        return PJ_TYPE_DATUM_ENSEMBLE;
-    }
-    if (dynamic_cast<TemporalDatum *>(ptr)) {
-        return PJ_TYPE_TEMPORAL_DATUM;
-    }
-    if (dynamic_cast<EngineeringDatum *>(ptr)) {
-        return PJ_TYPE_ENGINEERING_DATUM;
-    }
-    if (dynamic_cast<ParametricDatum *>(ptr)) {
-        return PJ_TYPE_PARAMETRIC_DATUM;
-    }
+        if (dynamic_cast<PrimeMeridian *>(ptr)) {
+            return PJ_TYPE_PRIME_MERIDIAN;
+        }
 
-    {
-        auto crs = dynamic_cast<GeographicCRS *>(ptr);
-        if (crs) {
-            if (crs->coordinateSystem()->axisList().size() == 2) {
-                return PJ_TYPE_GEOGRAPHIC_2D_CRS;
-            } else {
-                return PJ_TYPE_GEOGRAPHIC_3D_CRS;
+        if (dynamic_cast<DynamicGeodeticReferenceFrame *>(ptr)) {
+            return PJ_TYPE_DYNAMIC_GEODETIC_REFERENCE_FRAME;
+        }
+        if (dynamic_cast<GeodeticReferenceFrame *>(ptr)) {
+            return PJ_TYPE_GEODETIC_REFERENCE_FRAME;
+        }
+        if (dynamic_cast<DynamicVerticalReferenceFrame *>(ptr)) {
+            return PJ_TYPE_DYNAMIC_VERTICAL_REFERENCE_FRAME;
+        }
+        if (dynamic_cast<VerticalReferenceFrame *>(ptr)) {
+            return PJ_TYPE_VERTICAL_REFERENCE_FRAME;
+        }
+        if (dynamic_cast<DatumEnsemble *>(ptr)) {
+            return PJ_TYPE_DATUM_ENSEMBLE;
+        }
+        if (dynamic_cast<TemporalDatum *>(ptr)) {
+            return PJ_TYPE_TEMPORAL_DATUM;
+        }
+        if (dynamic_cast<EngineeringDatum *>(ptr)) {
+            return PJ_TYPE_ENGINEERING_DATUM;
+        }
+        if (dynamic_cast<ParametricDatum *>(ptr)) {
+            return PJ_TYPE_PARAMETRIC_DATUM;
+        }
+
+        {
+            auto crs = dynamic_cast<GeographicCRS *>(ptr);
+            if (crs) {
+                if (crs->coordinateSystem()->axisList().size() == 2) {
+                    return PJ_TYPE_GEOGRAPHIC_2D_CRS;
+                } else {
+                    return PJ_TYPE_GEOGRAPHIC_3D_CRS;
+                }
             }
         }
-    }
 
-    {
-        auto crs = dynamic_cast<GeodeticCRS *>(ptr);
-        if (crs) {
-            if (crs->isGeocentric()) {
-                return PJ_TYPE_GEOCENTRIC_CRS;
-            } else {
-                return PJ_TYPE_GEODETIC_CRS;
+        {
+            auto crs = dynamic_cast<GeodeticCRS *>(ptr);
+            if (crs) {
+                if (crs->isGeocentric()) {
+                    return PJ_TYPE_GEOCENTRIC_CRS;
+                } else {
+                    return PJ_TYPE_GEODETIC_CRS;
+                }
             }
         }
-    }
 
-    if (dynamic_cast<VerticalCRS *>(ptr)) {
-        return PJ_TYPE_VERTICAL_CRS;
-    }
-    if (dynamic_cast<ProjectedCRS *>(ptr)) {
-        return PJ_TYPE_PROJECTED_CRS;
-    }
-    if (dynamic_cast<CompoundCRS *>(ptr)) {
-        return PJ_TYPE_COMPOUND_CRS;
-    }
-    if (dynamic_cast<TemporalCRS *>(ptr)) {
-        return PJ_TYPE_TEMPORAL_CRS;
-    }
-    if (dynamic_cast<EngineeringCRS *>(ptr)) {
-        return PJ_TYPE_ENGINEERING_CRS;
-    }
-    if (dynamic_cast<BoundCRS *>(ptr)) {
-        return PJ_TYPE_BOUND_CRS;
-    }
-    if (dynamic_cast<CRS *>(ptr)) {
-        return PJ_TYPE_OTHER_CRS;
-    }
+        if (dynamic_cast<VerticalCRS *>(ptr)) {
+            return PJ_TYPE_VERTICAL_CRS;
+        }
+        if (dynamic_cast<ProjectedCRS *>(ptr)) {
+            return PJ_TYPE_PROJECTED_CRS;
+        }
+        if (dynamic_cast<CompoundCRS *>(ptr)) {
+            return PJ_TYPE_COMPOUND_CRS;
+        }
+        if (dynamic_cast<TemporalCRS *>(ptr)) {
+            return PJ_TYPE_TEMPORAL_CRS;
+        }
+        if (dynamic_cast<EngineeringCRS *>(ptr)) {
+            return PJ_TYPE_ENGINEERING_CRS;
+        }
+        if (dynamic_cast<BoundCRS *>(ptr)) {
+            return PJ_TYPE_BOUND_CRS;
+        }
+        if (dynamic_cast<CRS *>(ptr)) {
+            return PJ_TYPE_OTHER_CRS;
+        }
 
-    if (dynamic_cast<Conversion *>(ptr)) {
-        return PJ_TYPE_CONVERSION;
-    }
-    if (dynamic_cast<Transformation *>(ptr)) {
-        return PJ_TYPE_TRANSFORMATION;
-    }
-    if (dynamic_cast<ConcatenatedOperation *>(ptr)) {
-        return PJ_TYPE_CONCATENATED_OPERATION;
-    }
-    if (dynamic_cast<CoordinateOperation *>(ptr)) {
-        return PJ_TYPE_OTHER_COORDINATE_OPERATION;
-    }
+        if (dynamic_cast<Conversion *>(ptr)) {
+            return PJ_TYPE_CONVERSION;
+        }
+        if (dynamic_cast<Transformation *>(ptr)) {
+            return PJ_TYPE_TRANSFORMATION;
+        }
+        if (dynamic_cast<ConcatenatedOperation *>(ptr)) {
+            return PJ_TYPE_CONCATENATED_OPERATION;
+        }
+        if (dynamic_cast<CoordinateOperation *>(ptr)) {
+            return PJ_TYPE_OTHER_COORDINATE_OPERATION;
+        }
 
-    return PJ_TYPE_UNKNOWN;
+        return PJ_TYPE_UNKNOWN;
+    };
+
+    obj->type = getType();
+    return obj->type;
 }
 
 // ---------------------------------------------------------------------------
@@ -1296,12 +1293,10 @@ PJ_OBJ_LIST *proj_get_non_deprecated(PJ_CONTEXT *ctx, const PJ *obj) {
         for (const auto &resObj : res) {
             objects.push_back(resObj);
         }
-        ctx->safeAutoCloseDbIfNeeded();
         return new PJ_OBJ_LIST(std::move(objects));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -1352,9 +1347,6 @@ static int proj_is_equivalent_to_internal(PJ_CONTEXT *ctx, const PJ *obj,
         other->iso_obj.get(), cppCriterion,
         ctx ? getDBcontextNoException(ctx, "proj_is_equivalent_to_with_ctx")
             : nullptr);
-    if (ctx) {
-        ctx->safeAutoCloseDbIfNeeded();
-    }
     return res;
 }
 
@@ -1587,16 +1579,13 @@ const char *proj_as_wkt(PJ_CONTEXT *ctx, const PJ *obj, PJ_WKT_TYPE type,
                 std::string msg("Unknown option :");
                 msg += *iter;
                 proj_log_error(ctx, __FUNCTION__, msg.c_str());
-                ctx->safeAutoCloseDbIfNeeded();
                 return nullptr;
             }
         }
         obj->lastWKT = obj->iso_obj->exportToWKT(formatter.get());
-        ctx->safeAutoCloseDbIfNeeded();
         return obj->lastWKT.c_str();
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -1608,6 +1597,11 @@ const char *proj_as_wkt(PJ_CONTEXT *ctx, const PJ *obj, PJ_WKT_TYPE type,
  * The returned string is valid while the input obj parameter is valid,
  * and until a next call to proj_as_proj_string() with the same input
  * object.
+ *
+ * \warning If a CRS object was not created from a PROJ string,
+ *          exporting to a PROJ string will in most cases
+ *          cause a loss of information. This can potentially lead to
+ *          erroneous transformations.
  *
  * This function calls
  * osgeo::proj::io::IPROJStringExportable::exportToPROJString().
@@ -1683,11 +1677,9 @@ const char *proj_as_proj_string(PJ_CONTEXT *ctx, const PJ *obj,
             }
         }
         obj->lastPROJString = exportable->exportToPROJString(formatter.get());
-        ctx->safeAutoCloseDbIfNeeded();
         return obj->lastPROJString.c_str();
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -2089,7 +2081,6 @@ PJ *proj_crs_create_bound_crs_to_WGS84(PJ_CONTEXT *ctx, const PJ *crs,
                 std::string msg("Unknown option :");
                 msg += *iter;
                 proj_log_error(ctx, __FUNCTION__, msg.c_str());
-                ctx->safeAutoCloseDbIfNeeded();
                 return nullptr;
             }
         }
@@ -2097,7 +2088,6 @@ PJ *proj_crs_create_bound_crs_to_WGS84(PJ_CONTEXT *ctx, const PJ *crs,
                                       dbContext, allowIntermediateCRS));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -2154,7 +2144,6 @@ PJ *proj_crs_create_bound_vertical_crs(PJ_CONTEXT *ctx, const PJ *vert_crs,
                              BoundCRS::create(nnCRS, nnHubCRS, transformation));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -2585,14 +2574,12 @@ PJ_OBJ_LIST *proj_identify(PJ_CONTEXT *ctx, const PJ *obj,
                 *out_confidence = confidenceTemp;
                 confidenceTemp = nullptr;
             }
-            ctx->safeAutoCloseDbIfNeeded();
             return ret.release();
         } catch (const std::exception &e) {
             delete[] confidenceTemp;
             proj_log_error(ctx, __FUNCTION__, e.what());
         }
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -2617,12 +2604,10 @@ PROJ_STRING_LIST proj_get_authorities_from_database(PJ_CONTEXT *ctx) {
     SANITIZE_CTX(ctx);
     try {
         auto ret = to_string_list(getDBcontext(ctx)->getAuthorities());
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -2662,13 +2647,11 @@ PROJ_STRING_LIST proj_get_codes_from_database(PJ_CONTEXT *ctx,
         }
         auto ret = to_string_list(
             factory->getAuthorityCodes(typeInternal, allow_deprecated != 0));
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
 
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -2708,7 +2691,6 @@ PROJ_CELESTIAL_BODY_INFO **proj_get_celestial_body_list_from_database(
         ret[i] = nullptr;
         if (out_result_count)
             *out_result_count = i;
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -2719,7 +2701,6 @@ PROJ_CELESTIAL_BODY_INFO **proj_get_celestial_body_list_from_database(
         if (out_result_count)
             *out_result_count = 0;
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -2816,10 +2797,19 @@ proj_get_crs_info_list_from_database(PJ_CONTEXT *ctx, const char *auth_name,
     PROJ_CRS_INFO **ret = nullptr;
     int i = 0;
     try {
-        auto factory = AuthorityFactory::create(getDBcontext(ctx),
-                                                auth_name ? auth_name : "");
-        auto list = factory->getCRSInfoList();
-        ret = new PROJ_CRS_INFO *[list.size() + 1];
+        auto dbContext = getDBcontext(ctx);
+        const std::string authName = auth_name ? auth_name : "";
+        auto actualAuthNames =
+            dbContext->getVersionedAuthoritiesFromName(authName);
+        if (actualAuthNames.empty())
+            actualAuthNames.push_back(authName);
+        std::list<AuthorityFactory::CRSInfo> concatList;
+        for (const auto &actualAuthName : actualAuthNames) {
+            auto factory = AuthorityFactory::create(dbContext, actualAuthName);
+            auto list = factory->getCRSInfoList();
+            concatList.splice(concatList.end(), std::move(list));
+        }
+        ret = new PROJ_CRS_INFO *[concatList.size() + 1];
         GeographicBoundingBoxPtr bbox;
         if (params && params->bbox_valid) {
             bbox = GeographicBoundingBox::create(
@@ -2827,7 +2817,7 @@ proj_get_crs_info_list_from_database(PJ_CONTEXT *ctx, const char *auth_name,
                        params->east_lon_degree, params->north_lat_degree)
                        .as_nullable();
         }
-        for (const auto &info : list) {
+        for (const auto &info : concatList) {
             auto type = PJ_TYPE_CRS;
             if (info.type == AuthorityFactory::ObjectType::GEOGRAPHIC_2D_CRS) {
                 type = PJ_TYPE_GEOGRAPHIC_2D_CRS;
@@ -2837,6 +2827,9 @@ proj_get_crs_info_list_from_database(PJ_CONTEXT *ctx, const char *auth_name,
             } else if (info.type ==
                        AuthorityFactory::ObjectType::GEOCENTRIC_CRS) {
                 type = PJ_TYPE_GEOCENTRIC_CRS;
+            } else if (info.type ==
+                       AuthorityFactory::ObjectType::GEODETIC_CRS) {
+                type = PJ_TYPE_GEODETIC_CRS;
             } else if (info.type ==
                        AuthorityFactory::ObjectType::PROJECTED_CRS) {
                 type = PJ_TYPE_PROJECTED_CRS;
@@ -2937,7 +2930,6 @@ proj_get_crs_info_list_from_database(PJ_CONTEXT *ctx, const char *auth_name,
         ret[i] = nullptr;
         if (out_result_count)
             *out_result_count = i;
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -2948,7 +2940,6 @@ proj_get_crs_info_list_from_database(PJ_CONTEXT *ctx, const char *auth_name,
         if (out_result_count)
             *out_result_count = 0;
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -3030,7 +3021,6 @@ PROJ_UNIT_INFO **proj_get_units_from_database(PJ_CONTEXT *ctx,
         ret[i] = nullptr;
         if (out_result_count)
             *out_result_count = i;
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
@@ -3041,7 +3031,6 @@ PROJ_UNIT_INFO **proj_get_units_from_database(PJ_CONTEXT *ctx,
         if (out_result_count)
             *out_result_count = 0;
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -3335,7 +3324,6 @@ PJ *proj_create_geographic_crs(PJ_CONTEXT *ctx, const char *crs_name,
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -3382,7 +3370,6 @@ PJ *proj_create_geographic_crs_from_datum(PJ_CONTEXT *ctx, const char *crs_name,
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -3717,7 +3704,7 @@ PJ *proj_create_compound_crs(PJ_CONTEXT *ctx, const char *crs_name,
  * @return Object that must be unreferenced with
  * proj_destroy(), or NULL in case of error.
  */
-PJ PROJ_DLL *proj_alter_name(PJ_CONTEXT *ctx, const PJ *obj, const char *name) {
+PJ *proj_alter_name(PJ_CONTEXT *ctx, const PJ *obj, const char *name) {
     SANITIZE_CTX(ctx);
     if (!obj || !name) {
         proj_context_errno_set(ctx, PROJ_ERR_OTHER_API_MISUSE);
@@ -3754,8 +3741,8 @@ PJ PROJ_DLL *proj_alter_name(PJ_CONTEXT *ctx, const PJ *obj, const char *name) {
  * @return Object that must be unreferenced with
  * proj_destroy(), or NULL in case of error.
  */
-PJ PROJ_DLL *proj_alter_id(PJ_CONTEXT *ctx, const PJ *obj,
-                           const char *auth_name, const char *code) {
+PJ *proj_alter_id(PJ_CONTEXT *ctx, const PJ *obj, const char *auth_name,
+                  const char *code) {
     SANITIZE_CTX(ctx);
     if (!obj || !auth_name || !code) {
         proj_context_errno_set(ctx, PROJ_ERR_OTHER_API_MISUSE);
@@ -4029,7 +4016,6 @@ PJ *proj_crs_promote_to_3D(PJ_CONTEXT *ctx, const char *crs_3D_name,
                                          dbContext));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -4116,7 +4102,6 @@ PJ *proj_crs_create_projected_3D_crs_from_2D(PJ_CONTEXT *ctx,
                     cpp_projected_2D_crs->derivingConversion(), newCS));
         } catch (const std::exception &e) {
             proj_log_error(ctx, __FUNCTION__, e.what());
-            ctx->safeAutoCloseDbIfNeeded();
             return nullptr;
         }
     } else {
@@ -4129,7 +4114,6 @@ PJ *proj_crs_create_projected_3D_crs_from_2D(PJ_CONTEXT *ctx,
                                      dbContext));
         } catch (const std::exception &e) {
             proj_log_error(ctx, __FUNCTION__, e.what());
-            ctx->safeAutoCloseDbIfNeeded();
             return nullptr;
         }
     }
@@ -4175,7 +4159,6 @@ PJ *proj_crs_demote_to_2D(PJ_CONTEXT *ctx, const char *crs_2D_name,
                                         dbContext));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return nullptr;
     }
 }
@@ -4194,8 +4177,7 @@ PJ *proj_crs_demote_to_2D(PJ_CONTEXT *ctx, const char *crs_2D_name,
  * @return Object that must be unreferenced with
  * proj_destroy(), or NULL in case of error.
  */
-PJ PROJ_DLL *proj_create_engineering_crs(PJ_CONTEXT *ctx,
-                                         const char *crs_name) {
+PJ *proj_create_engineering_crs(PJ_CONTEXT *ctx, const char *crs_name) {
     SANITIZE_CTX(ctx);
     try {
         return pj_obj_create(
@@ -7152,6 +7134,37 @@ PJ *proj_create_conversion_pole_rotation_grib_convention(
     return nullptr;
 }
 
+// ---------------------------------------------------------------------------
+
+/** \brief Instantiate a conversion based on the Pole Rotation method, using
+ * the conventions of the netCDF CF convention for the netCDF format.
+ *
+ * See
+ * osgeo::proj::operation::Conversion::createPoleRotationNetCDFCFConvention().
+ *
+ * Linear parameters are expressed in (linear_unit_name,
+ * linear_unit_conv_factor).
+ * Angular parameters are expressed in (ang_unit_name, ang_unit_conv_factor).
+ */
+PJ *proj_create_conversion_pole_rotation_netcdf_cf_convention(
+    PJ_CONTEXT *ctx, double grid_north_pole_latitude,
+    double grid_north_pole_longitude, double north_pole_grid_longitude,
+    const char *ang_unit_name, double ang_unit_conv_factor) {
+    SANITIZE_CTX(ctx);
+    try {
+        UnitOfMeasure angUnit(
+            createAngularUnit(ang_unit_name, ang_unit_conv_factor));
+        auto conv = Conversion::createPoleRotationNetCDFCFConvention(
+            PropertyMap(), Angle(grid_north_pole_latitude, angUnit),
+            Angle(grid_north_pole_longitude, angUnit),
+            Angle(north_pole_grid_longitude, angUnit));
+        return proj_create_conversion(ctx, conv);
+    } catch (const std::exception &e) {
+        proj_log_error(ctx, __FUNCTION__, e.what());
+    }
+    return nullptr;
+}
+
 /* END: Generated by scripts/create_c_api_projections.py*/
 
 // ---------------------------------------------------------------------------
@@ -7187,10 +7200,8 @@ int proj_coordoperation_is_instantiable(PJ_CONTEXT *ctx,
                        dbContext, proj_context_is_network_enabled(ctx) != FALSE)
                        ? 1
                        : 0;
-        ctx->safeAutoCloseDbIfNeeded();
         return ret;
     } catch (const std::exception &) {
-        ctx->safeAutoCloseDbIfNeeded();
         return 0;
     }
 }
@@ -7525,11 +7536,9 @@ int proj_coordoperation_get_grid_used_count(PJ_CONTEXT *ctx,
                 coordoperation->gridsNeeded.emplace_back(gridDesc);
             }
         }
-        ctx->safeAutoCloseDbIfNeeded();
         return static_cast<int>(coordoperation->gridsNeeded.size());
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
-        ctx->safeAutoCloseDbIfNeeded();
         return 0;
     }
 }
@@ -7657,7 +7666,6 @@ proj_create_operation_factory_context(PJ_CONTEXT *ctx, const char *authority) {
                 std::string(authority ? authority : ""));
             auto operationContext =
                 CoordinateOperationContext::create(authFactory, nullptr, 0.0);
-            ctx->safeAutoCloseDbIfNeeded();
             return new PJ_OPERATION_FACTORY_CONTEXT(
                 std::move(operationContext));
         } else {
@@ -7669,7 +7677,6 @@ proj_create_operation_factory_context(PJ_CONTEXT *ctx, const char *authority) {
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 
@@ -7805,7 +7812,7 @@ void proj_operation_factory_context_set_crs_extent_use(
  * @param factory_ctx Operation factory context. must not be NULL
  * @param criterion spatial criterion to use
  */
-void PROJ_DLL proj_operation_factory_context_set_spatial_criterion(
+void proj_operation_factory_context_set_spatial_criterion(
     PJ_CONTEXT *ctx, PJ_OPERATION_FACTORY_CONTEXT *factory_ctx,
     PROJ_SPATIAL_CRITERION criterion) {
     SANITIZE_CTX(ctx);
@@ -7843,7 +7850,7 @@ void PROJ_DLL proj_operation_factory_context_set_spatial_criterion(
  * @param factory_ctx Operation factory context. must not be NULL
  * @param use how grid availability is used.
  */
-void PROJ_DLL proj_operation_factory_context_set_grid_availability_use(
+void proj_operation_factory_context_set_grid_availability_use(
     PJ_CONTEXT *ctx, PJ_OPERATION_FACTORY_CONTEXT *factory_ctx,
     PROJ_GRID_AVAILABILITY_USE use) {
     SANITIZE_CTX(ctx);
@@ -8004,7 +8011,7 @@ void proj_operation_factory_context_set_allowed_intermediate_crs(
  * @param factory_ctx Operation factory context. must not be NULL
  * @param discard superseded crs or not
  */
-void PROJ_DLL proj_operation_factory_context_set_discard_superseded(
+void proj_operation_factory_context_set_discard_superseded(
     PJ_CONTEXT *ctx, PJ_OPERATION_FACTORY_CONTEXT *factory_ctx, int discard) {
     SANITIZE_CTX(ctx);
     if (!factory_ctx) {
@@ -8028,7 +8035,7 @@ void PROJ_DLL proj_operation_factory_context_set_discard_superseded(
  * @param allow set to TRUE to allow ballpark transformations.
  * @since 7.1
  */
-void PROJ_DLL proj_operation_factory_context_set_allow_ballpark_transformations(
+void proj_operation_factory_context_set_allow_ballpark_transformations(
     PJ_CONTEXT *ctx, PJ_OPERATION_FACTORY_CONTEXT *factory_ctx, int allow) {
     SANITIZE_CTX(ctx);
     if (!factory_ctx) {
@@ -8505,7 +8512,12 @@ PJ *proj_crs_get_datum_forced(PJ_CONTEXT *ctx, const PJ *crs) {
     const auto &datumEnsemble = l_crs->datumEnsemble();
     assert(datumEnsemble);
     auto dbContext = getDBcontextNoException(ctx, __FUNCTION__);
-    return pj_obj_create(ctx, datumEnsemble->asDatum(dbContext));
+    try {
+        return pj_obj_create(ctx, datumEnsemble->asDatum(dbContext));
+    } catch (const std::exception &e) {
+        proj_log_debug(ctx, __FUNCTION__, e.what());
+        return nullptr;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -8746,6 +8758,10 @@ PJ *proj_normalize_for_visualization(PJ_CONTEXT *ctx, const PJ *obj) {
             if (!pjNew)
                 return nullptr;
             pjNew->ctx = ctx;
+            pjNew->descr = "Set of coordinate operations";
+            pjNew->left = obj->left;
+            pjNew->right = obj->right;
+
             for (const auto &alt : obj->alternativeCoordinateOperations) {
                 auto co = dynamic_cast<const CoordinateOperation *>(
                     alt.pj->iso_obj.get());
@@ -9195,12 +9211,10 @@ proj_get_geoid_models_from_database(PJ_CONTEXT *ctx, const char *auth_name,
         const std::string codeStr(code);
         auto factory = AuthorityFactory::create(getDBcontext(ctx), auth_name);
         auto geoidModels = factory->getGeoidModels(codeStr);
-        ctx->safeAutoCloseDbIfNeeded();
         return to_string_list(std::move(geoidModels));
     } catch (const std::exception &e) {
         proj_log_error(ctx, __FUNCTION__, e.what());
     }
-    ctx->safeAutoCloseDbIfNeeded();
     return nullptr;
 }
 

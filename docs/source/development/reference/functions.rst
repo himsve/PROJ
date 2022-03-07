@@ -52,7 +52,7 @@ paragraph for more details.
       syntax "EPSG:2393+5717"),
     - a OGC URN combining references for concatenated operations
       (e.g. "urn:ogc:def:coordinateOperation,coordinateOperation:EPSG::3895,coordinateOperation:EPSG::1618")
-    - a PROJJSON string. The jsonschema is at https://proj.org/schemas/v0.2/projjson.schema.json (*added in 6.2*)
+    - a PROJJSON string. The jsonschema is at https://proj.org/schemas/v0.4/projjson.schema.json (*added in 6.2*)
     - a compound CRS made from two object names separated with " + ". e.g. "WGS 84 + EGM96 height" (*added in 7.1*)
 
     Example call:
@@ -200,6 +200,9 @@ paragraph for more details.
 
     - ALLOW_BALLPARK=YES/NO: can be set to NO to disallow the use of
       :term:`Ballpark transformation` in the candidate coordinate operations.
+
+    - FORCE_OVER=YES/NO: can be set to YES to force the +over flag on the transformation
+      returned by this function.
 
 .. doxygenfunction:: proj_normalize_for_visualization
    :project: doxygen_api
@@ -389,6 +392,11 @@ Coordinate transformation
               This error number will be a precise error number if all coordinates that fail to transform
               for the same reason, or a generic error code if they fail for different
               reasons.
+
+
+
+.. doxygenfunction:: proj_trans_bounds
+   :project: doxygen_api
 
 
 Error reporting
@@ -756,6 +764,15 @@ Various
     distortion and meridian convergence. Depending on the underlying projection
     values will be calculated either numerically (default) or analytically.
 
+    Starting with PROJ 8.2, the P object can be a projected CRS, for example
+    instantiated from a EPSG CRS code. The factors computed will be those of the
+    map projection implied by the transformation from the base geographic CRS of
+    the projected CRS to the projected CRS.
+
+    The input geodetic coordinate lp should be such that lp.lam is the longitude
+    in radian, and lp.phi the latitude in radian (thus independently of the
+    definition of the base CRS, if P is a projected CRS).
+
     The function also calculates the partial derivatives of the given
     coordinate.
 
@@ -861,6 +878,9 @@ Setting custom I/O functions
    :project: doxygen_api
 
 .. doxygenfunction:: proj_context_set_sqlite3_vfs_name
+   :project: doxygen_api
+
+.. doxygenfunction:: proj_context_set_search_paths
    :project: doxygen_api
 
 

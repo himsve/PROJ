@@ -41,7 +41,6 @@
 #include "filemanager.hpp"
 #include <math.h>
 
-
 /**************************************************************************************/
 static paralist *string_to_paralist (PJ_CONTEXT *ctx, char *definition) {
 /***************************************************************************************
@@ -590,6 +589,9 @@ pj_init_ctx_with_allow_init_epsg(PJ_CONTEXT *ctx, int argc, char **argv, int all
 
     /* Over-ranging flag */
     PIN->over = pj_param(ctx, start, "bover").i;
+    if (ctx->forceOver) {
+        PIN->over = ctx->forceOver;
+    }
 
     /* Vertical datum geoid grids */
     PIN->has_geoid_vgrids = pj_param(ctx, start, "tgeoidgrids").i;

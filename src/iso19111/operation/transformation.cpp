@@ -474,13 +474,16 @@ static void getTransformationType(const crs::CRSNNPtr &sourceCRSIn,
         dynamic_cast<const crs::GeographicCRS *>(sourceCRSIn.get());
     auto targetCRSGeog =
         dynamic_cast<const crs::GeographicCRS *>(targetCRSIn.get());
-    if (!sourceCRSGeog || !targetCRSGeog) {
+    if (!(sourceCRSGeog ||
+          (sourceCRSGeod && sourceCRSGeod->isSphericalPlanetocentric())) ||
+        !(targetCRSGeog ||
+          (targetCRSGeod && targetCRSGeod->isSphericalPlanetocentric()))) {
         throw InvalidOperation("Inconsistent CRS type");
     }
     const auto nSrcAxisCount =
-        sourceCRSGeog->coordinateSystem()->axisList().size();
+        sourceCRSGeod->coordinateSystem()->axisList().size();
     const auto nTargetAxisCount =
-        targetCRSGeog->coordinateSystem()->axisList().size();
+        targetCRSGeod->coordinateSystem()->axisList().size();
     isGeog2D = nSrcAxisCount == 2 && nTargetAxisCount == 2;
     isGeog3D = !isGeog2D && nSrcAxisCount >= 2 && nTargetAxisCount >= 2;
 }
@@ -1003,36 +1006,36 @@ TransformationNNPtr Transformation::createTOWGS84(
             "Invalid number of elements in TOWGS84Parameters");
     }
 
-    crs::CRSPtr transformSourceCRS = sourceCRSIn->extractGeodeticCRS();
-    if (!transformSourceCRS) {
+    auto transformSourceGeodCRS = sourceCRSIn->extractGeodeticCRS();
+    if (!transformSourceGeodCRS) {
         throw InvalidOperation(
             "Cannot find GeodeticCRS in sourceCRS of TOWGS84 transformation");
     }
 
     util::PropertyMap properties;
     properties.set(common::IdentifiedObject::NAME_KEY,
-                   concat("Transformation from ", transformSourceCRS->nameStr(),
-                          " to WGS84"));
+                   concat("Transformation from ",
+                          transformSourceGeodCRS->nameStr(), " to WGS84"));
 
-    auto targetCRS =
-        dynamic_cast<const crs::GeographicCRS *>(transformSourceCRS.get())
-            ? util::nn_static_pointer_cast<crs::CRS>(
-                  crs::GeographicCRS::EPSG_4326)
-            : util::nn_static_pointer_cast<crs::CRS>(
-                  crs::GeodeticCRS::EPSG_4978);
+    auto targetCRS = dynamic_cast<const crs::GeographicCRS *>(
+                         transformSourceGeodCRS.get()) ||
+                             transformSourceGeodCRS->isSphericalPlanetocentric()
+                         ? util::nn_static_pointer_cast<crs::CRS>(
+                               crs::GeographicCRS::EPSG_4326)
+                         : util::nn_static_pointer_cast<crs::CRS>(
+                               crs::GeodeticCRS::EPSG_4978);
 
+    crs::CRSNNPtr transformSourceCRS = NN_NO_CHECK(transformSourceGeodCRS);
     if (TOWGS84Parameters.size() == 3) {
         return createGeocentricTranslations(
-            properties, NN_NO_CHECK(transformSourceCRS), targetCRS,
-            TOWGS84Parameters[0], TOWGS84Parameters[1], TOWGS84Parameters[2],
-            {});
+            properties, transformSourceCRS, targetCRS, TOWGS84Parameters[0],
+            TOWGS84Parameters[1], TOWGS84Parameters[2], {});
     }
 
-    return createPositionVector(properties, NN_NO_CHECK(transformSourceCRS),
-                                targetCRS, TOWGS84Parameters[0],
-                                TOWGS84Parameters[1], TOWGS84Parameters[2],
-                                TOWGS84Parameters[3], TOWGS84Parameters[4],
-                                TOWGS84Parameters[5], TOWGS84Parameters[6], {});
+    return createPositionVector(
+        properties, transformSourceCRS, targetCRS, TOWGS84Parameters[0],
+        TOWGS84Parameters[1], TOWGS84Parameters[2], TOWGS84Parameters[3],
+        TOWGS84Parameters[4], TOWGS84Parameters[5], TOWGS84Parameters[6], {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1474,7 +1477,6 @@ createApproximateInverseIfPossible(const Transformation *op) {
 
     return nullptr;
 }
-//! @endcond
 
 // ---------------------------------------------------------------------------
 
@@ -2008,6 +2010,8 @@ isGeographic3DToGravityRelatedHeight(const OperationMethodNNPtr &method,
         "1100", // Geog3D to Geog2D+GravityRelatedHeight (PL txt)
         "1103", // Geog3D to Geog2D+GravityRelatedHeight (EGM)
         "1105", // Geog3D to Geog2D+GravityRelatedHeight (ITAL2005)
+        "1109", // Geographic3D to Depth (Gravsoft)
+        "1110", // Geog3D to Geog2D+Depth (Gravsoft)
         "9661", // Geographic3D to GravityRelatedHeight (EGM)
         "9662", // Geographic3D to GravityRelatedHeight (Ausgeoid98)
         "9663", // Geographic3D to GravityRelatedHeight (OSGM-GB)
@@ -3159,6 +3163,13 @@ void Transformation::_exportToPROJString(
                     concat("Can apply ", methodName, " only to GeographicCRS"));
             }
 
+            auto targetVertCRS = targetCRS()->extractVerticalCRS();
+            if (!targetVertCRS) {
+                throw io::FormattingException(
+                    concat("Can apply ", methodName,
+                           " only to a target CRS that has a VerticalCRS"));
+            }
+
             if (!formatter->omitHorizontalConversionInVertTransformation()) {
                 formatter->startInversion();
                 formatter->pushOmitZUnitConversion();
@@ -3173,6 +3184,15 @@ void Transformation::_exportToPROJString(
             if (doInversion) {
                 formatter->startInversion();
             }
+
+            // For Geographic3D to Depth methods, we rely on the vertical axis
+            // direction instead of the name/code of the transformation method.
+            if (targetVertCRS->coordinateSystem()->axisList()[0]->direction() ==
+                cs::AxisDirection::DOWN) {
+                formatter->addStep("axisswap");
+                formatter->addParam("order", "1,2,-3");
+            }
+
             formatter->addStep("vgridshift");
             formatter->addParam("grids", filename);
             formatter->addParam("multiplier", 1.0);

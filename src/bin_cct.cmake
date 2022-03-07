@@ -12,8 +12,4 @@ target_link_libraries(cct PRIVATE ${PROJ_LIBRARIES})
 target_compile_options(cct PRIVATE ${PROJ_CXX_WARN_FLAGS})
 
 install(TARGETS cct
-  RUNTIME DESTINATION ${BINDIR})
-
-if(MSVC AND BUILD_SHARED_LIBS)
-  target_compile_definitions(cct PRIVATE PROJ_MSVC_DLL_IMPORT=1)
-endif()
+  DESTINATION ${BINDIR})

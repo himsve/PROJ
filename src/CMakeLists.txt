@@ -3,34 +3,34 @@
 include(lib_proj.cmake)
 
 # configure executable build
+option(BUILD_APPS
+  "Build PROJ applications (default value for BUILD_CCT, BUILD_CS2CS, etc.)" ON)
+
 option(BUILD_CCT
-  "Build cct (coordinate conversion and transformation tool)" ON)
+  "Build cct (coordinate conversion and transformation tool)" "${BUILD_APPS}")
 option(BUILD_CS2CS
-  "Build cs2cs (coordinate systems to coordinate systems translation tool)" ON)
+  "Build cs2cs (coordinate systems to coordinate systems translation tool)" "${BUILD_APPS}")
 option(BUILD_GEOD
-  "Build geod (computation of geodesic lines)" ON)
+  "Build geod (computation of geodesic lines)" "${BUILD_APPS}")
 option(BUILD_GIE
-  "Build gie (geospatial integrity investigation environment)" ON)
+  "Build gie (geospatial integrity investigation environment)" "${BUILD_APPS}")
 option(BUILD_PROJ
-  "Build proj (cartographic projection tool)" ON)
+  "Build proj (cartographic projection tool)" "${BUILD_APPS}")
 option(BUILD_PROJINFO
-  "Build projinfo (SRS and coordinate operation metadata/query tool)" ON)
+  "Build projinfo (SRS and coordinate operation metadata/query tool)" "${BUILD_APPS}")
 option(BUILD_PROJSYNC
-  "Build projsync (synchronize transformation support data)" ON)
+  "Build projsync (synchronize transformation support data)" "${BUILD_APPS}")
 
 if(NOT MSVC)
 
-  if(NOT APPLE)
-    # Use relative path so that package is relocatable
-    set(CMAKE_INSTALL_RPATH "\$ORIGIN/../${LIBDIR}")
-  else()
+  # Use relative path so that package is relocatable
+  if(APPLE)
     set(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/${LIBDIR}")
-    # TO DO: cmake 2.8.12 introduces a way to make the install tree
-    # relocatable with OSX via
-    # (1) set(CMAKE_MACOSX_RPATH ON) and
-    # (2) setting the INSTALL_RPATH property on the executables to
-    # "@loader_path/../${LIBDIR}"
+    set(CMAKE_INSTALL_RPATH "@loader_path/../${LIBDIR}")
+  else()
+    set(CMAKE_INSTALL_RPATH "\$ORIGIN/../${LIBDIR}")
   endif()
+  # Other apps can link to libproj using e.g. LDFLAGS -Wl,-rpath,${prefix}/lib
 
 else()
 
@@ -69,7 +69,8 @@ if(BUILD_PROJINFO)
   set(BIN_TARGETS ${BIN_TARGETS} binprojinfo)
 endif()
 
-if(BUILD_GIE)
+# Always build gie if testing is requested
+if(BUILD_GIE OR BUILD_TESTING)
   include(bin_gie.cmake)
   set(BIN_TARGETS ${BIN_TARGETS} gie)
 endif()
