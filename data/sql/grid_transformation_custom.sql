@@ -215,24 +215,24 @@ INSERT INTO "usage" VALUES(
 -- Norway, Svalbard
 
 INSERT INTO "vertical_datum" VALUES(
-    'EPSG','10100',
+    'EPSG','10103',
     'Svalbard Normal Null',
-    NULL,NULL,NULL,NULL,0);
+    NULL,NULL,NULL,NULL,NULL,0);
 INSERT INTO "usage" VALUES(
     NULL,NULL,'vertical_datum',
-    'EPSG','10100',
+    'EPSG','10103',
     'EPSG','4058',
     'EPSG','1151');
 
 INSERT INTO "vertical_crs" VALUES(
-    'EPSG','10101',
-    'NNSvalbard height',
+    'EPSG','10104',
+    'NNSvalbard height',	
     NULL,
     'EPSG','6499',
-    'EPSG','10100',0);
+    'EPSG','10103',0);
 INSERT INTO "usage" VALUES(
     NULL,NULL,'vertical_crs',
-    'EPSG','10101',
+    'EPSG','10104',
     'EPSG','4058',
     'EPSG','1151');
 
@@ -241,7 +241,7 @@ INSERT INTO "grid_transformation" VALUES(
     NULL,
     'EPSG','9665','Geographic3D to GravityRelatedHeight (gtx)',
     'EPSG','4937',  -- source CRS (ETRS89)
-    'EPSG','10101', -- target CRS (ARCGP height)
+    'EPSG','10104', -- target CRS (ARCGP height)
     NULL,
     'EPSG','8666','Geoid (height correction) model file','arcgp-2006-sk.bin',
     NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);
