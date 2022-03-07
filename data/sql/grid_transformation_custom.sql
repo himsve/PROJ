@@ -212,24 +212,45 @@ INSERT INTO "usage" VALUES(
     'EPSG','1024'  -- unknown
 );
 
--- Norway
+-- Norway, Svalbard
+
+INSERT INTO "vertical_datum" VALUES(
+    'EPSG','10100',
+    'Svalbard Normal Null',
+    NULL,NULL,NULL,NULL,0);
+INSERT INTO "usage" VALUES(
+    NULL,NULL,'vertical_datum',
+    'EPSG','10100',
+    'EPSG','4058',
+    'EPSG','1151');
+
+INSERT INTO "vertical_crs" VALUES(
+    'EPSG','10101',
+    'NNSvalbard height',
+    NULL,
+    'EPSG','6499',
+    'EPSG','10100',0);
+INSERT INTO "usage" VALUES(
+    NULL,NULL,'vertical_crs',
+    'EPSG','10101',
+    'EPSG','4058',
+    'EPSG','1151');
 
 INSERT INTO "grid_transformation" VALUES(
-    'PROJ','EPSG_4937_TO_EPSG_9672','ETRS89 to ARCGP height',
+    'EPSG','14003','ETRS89 to ARCGP height',
     NULL,
     'EPSG','9665','Geographic3D to GravityRelatedHeight (gtx)',
-    'EPSG','4937', -- source CRS (ETRS89)
-    'EPSG','9672', -- target CRS (ARCGP height)
+    'EPSG','4937',  -- source CRS (ETRS89)
+    'EPSG','10101', -- target CRS (ARCGP height)
     NULL,
     'EPSG','8666','Geoid (height correction) model file','arcgp-2006-sk.bin',
     NULL,NULL,NULL,NULL,NULL,NULL,NULL,0);
 INSERT INTO "usage" VALUES(
-    'PROJ',
-    'EPSG_4937_TO_EPSG_9672_USAGE',
-    'grid_transformation',
-    'PROJ',
-    'EPSG_4937_TO_EPSG_9672',
-    'EPSG','1182', -- area of use: Norway including Svalbard - onshore and offshore.
-    'EPSG','1042'  -- accuracy: 2 meters
+    --'EPSG','14003',
+    NULL,NULL,'grid_transformation',
+    'EPSG','14003',
+    'EPSG','4058', -- area of use: Svalbard - onshore and offshore.
+    'EPSG','1151'  -- accuracy: 2 meters
 );
 
+--INSERT INTO "usage" VALUES('EPSG','8409','grid_transformation','EPSG','1488','EPSG','1393','EPSG','1027');
