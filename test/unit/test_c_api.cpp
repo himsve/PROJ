@@ -4486,6 +4486,118 @@ TEST_F(CApi, proj_normalize_for_visualization_on_crs) {
 
 // ---------------------------------------------------------------------------
 
+TEST_F(CApi, proj_normalize_for_visualization_engineering_crs) {
+
+    // EPSG:2044 is a (north, east) ProjectedCRS, EPSG:5803 Maturin Grid
+    // a (north, east) EngineeringCRS
+    for (const char *code : {"EPSG:2044", "EPSG:5803"}) {
+        auto P = proj_create(m_ctxt, code);
+        ObjectKeeper keeper_P(P);
+        ASSERT_NE(P, nullptr);
+        auto Pnormalized = proj_normalize_for_visualization(m_ctxt, P);
+        ObjectKeeper keeper_Pnormalized(Pnormalized);
+        ASSERT_NE(Pnormalized, nullptr);
+
+        auto cs = proj_crs_get_coordinate_system(m_ctxt, Pnormalized);
+        ASSERT_NE(cs, nullptr);
+        ObjectKeeper keeperCs(cs);
+
+        const char *direction = nullptr;
+        ASSERT_TRUE(proj_cs_get_axis_info(m_ctxt, cs, 0, nullptr, nullptr,
+                                          &direction, nullptr, nullptr, nullptr,
+                                          nullptr));
+        ASSERT_NE(direction, nullptr);
+        EXPECT_EQ(std::string(direction), "east") << code;
+    }
+
+    const auto getWKT = [this](const char *code) {
+        auto crs = proj_create(m_ctxt, code);
+        ObjectKeeper keeper_crs(crs);
+        if (!crs)
+            return std::string();
+        const char *wkt = proj_as_wkt(m_ctxt, crs, PJ_WKT2_2019, nullptr);
+        return std::string(wkt ? wkt : "");
+    };
+
+    const std::string similarity =
+        "METHOD[\"Similarity transformation\",ID[\"EPSG\",9621]],"
+        "PARAMETER[\"Ordinate 1 of evaluation point in target CRS\",478000,"
+        "LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8621]],"
+        "PARAMETER[\"Ordinate 2 of evaluation point in target CRS\",1078000,"
+        "LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8622]],"
+        "PARAMETER[\"Scale factor for source CRS axes\",1,"
+        "SCALEUNIT[\"unity\",1],ID[\"EPSG\",1061]],"
+        "PARAMETER[\"Rotation angle of source CRS axes\",";
+    const std::string similarityEnd =
+        ",ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8614]]";
+
+    const auto gridOffsets = [](const std::string &eastingOffset,
+                                const std::string &northingOffset) {
+        return "METHOD[\"Cartesian Grid Offsets\",ID[\"EPSG\",9656]],"
+               "PARAMETER[\"Easting offset\"," +
+               eastingOffset +
+               ",LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8728]],"
+               "PARAMETER[\"Northing offset\"," +
+               northingOffset + ",LENGTHUNIT[\"metre\",1],ID[\"EPSG\",8729]]";
+    };
+
+    // Transforms (xDeclared, yDeclared) with the operation, and (xNormalized,
+    // yNormalized) with its normalized version: both must give
+    // (xExpected, yExpected), and invert back.
+    const auto check = [this, &getWKT](const char *srcCode, const char *dstCode,
+                                       const std::string &methodAndParams,
+                                       double xDeclared, double yDeclared,
+                                       double xNormalized, double yNormalized,
+                                       double xExpected, double yExpected) {
+        const std::string wkt = "COORDINATEOPERATION[\"test\",SOURCECRS[" +
+                                getWKT(srcCode) + "],TARGETCRS[" +
+                                getWKT(dstCode) + "]," + methodAndParams + "]";
+        auto P = proj_create(m_ctxt, wkt.c_str());
+        ObjectKeeper keeper_P(P);
+        ASSERT_NE(P, nullptr);
+        auto Pnormalized = proj_normalize_for_visualization(m_ctxt, P);
+        ObjectKeeper keeper_Pnormalized(Pnormalized);
+        ASSERT_NE(Pnormalized, nullptr);
+
+        for (int i = 0; i < 2; ++i) {
+            PJ *op = i == 0 ? P : Pnormalized;
+            const double xIn = i == 0 ? xDeclared : xNormalized;
+            const double yIn = i == 0 ? yDeclared : yNormalized;
+            PJ_COORD c = proj_coord(xIn, yIn, 0, HUGE_VAL);
+            c = proj_trans(op, PJ_FWD, c);
+            EXPECT_NEAR(c.xy.x, xExpected, 1e-9) << methodAndParams << " " << i;
+            EXPECT_NEAR(c.xy.y, yExpected, 1e-9) << methodAndParams << " " << i;
+            c = proj_trans(op, PJ_INV, c);
+            EXPECT_NEAR(c.xy.x, xIn, 1e-9) << methodAndParams << " " << i;
+            EXPECT_NEAR(c.xy.y, yIn, 1e-9) << methodAndParams << " " << i;
+        }
+    };
+
+    // Point 100 m east and 200 m north of the grid origin
+
+    // Maturin Grid (north, east) to PSAD56 / UTM zone 20N (east, north)
+    check("EPSG:5803", "EPSG:24820", similarity + "0" + similarityEnd, 200, 100,
+          100, 200, 478200, 1078100);
+    {
+        const double q = 30 * 0.0174532925199433;
+        check("EPSG:5803", "EPSG:24820", similarity + "30" + similarityEnd, 200,
+              100, 100, 200, 478000 + 200 * cos(q) + 100 * sin(q),
+              1078000 - 200 * sin(q) + 100 * cos(q));
+    }
+    check("EPSG:5803", "EPSG:24820", gridOffsets("478000", "1078000"), 200, 100,
+          100, 200, 478100, 1078200);
+
+    // Astra Minas Grid (north, west) is not normalized
+    check("EPSG:5800", "EPSG:24820", gridOffsets("478000", "1078000"), 200,
+          -100, 200, -100, 478100, 1078200);
+
+    // Christmas Island Grid 1985 (east, north) to GDA94 / MGA zone 48
+    check("EPSG:6715", "EPSG:28348", gridOffsets("550015", "8780001"), 100, 200,
+          100, 200, 550115, 8780201);
+}
+
+// ---------------------------------------------------------------------------
+
 TEST_F(CApi, proj_coordoperation_create_inverse) {
 
     auto P = proj_create(
@@ -4878,6 +4990,57 @@ TEST_F(CApi, proj_create_crs_to_crs_from_pj_ballpark_filter) {
 
 // ---------------------------------------------------------------------------
 
+TEST_F(CApi, proj_create_crs_to_crs_engineering_crs) {
+    // Requires uk_os_OSTN15_NTv2_OSGBtoETRS.tif to be missing
+    if (proj_context_is_network_enabled(m_ctxt)) {
+        return;
+    }
+
+    // Heathrow Airport Grid to WGS 84 has several candidates. The best one
+    // uses a missing grid, so the next one is used.
+    auto P = proj_create_crs_to_crs(m_ctxt, "EPSG:11378", "EPSG:4326", nullptr);
+    ObjectKeeper keeper_P(P);
+    ASSERT_NE(P, nullptr);
+    EXPECT_EQ(std::string(proj_get_name(P)),
+              "Inverse of OSGB36 / British National Grid to Heathrow Airport "
+              "Grid (1) + Inverse of British National Grid + OSGB36 to WGS 84 "
+              "(6)");
+
+    // Same as EPSG:11378 -> EPSG:27700, followed by OSGB36 to WGS 84 (6)
+    PJ_COORD c = proj_coord(1000, 2000, 0, 0);
+    c = proj_trans(P, PJ_FWD, c);
+    EXPECT_NEAR(c.xy.x, 51.4375929457, 1e-10);
+    EXPECT_NEAR(c.xy.y, -0.5440486683, 1e-10);
+
+    auto Pinv =
+        proj_create_crs_to_crs(m_ctxt, "EPSG:4326", "EPSG:11378", nullptr);
+    ObjectKeeper keeper_Pinv(Pinv);
+    ASSERT_NE(Pinv, nullptr);
+    EXPECT_EQ(std::string(proj_get_name(Pinv)),
+              "Inverse of OSGB36 to WGS 84 (6) + British National Grid + "
+              "OSGB36 / British National Grid to Heathrow Airport Grid (1)");
+    const PJ_COORD cInv = proj_trans(P, PJ_INV, c);
+    c = proj_trans(Pinv, PJ_FWD, c);
+    EXPECT_NEAR(c.xy.x, cInv.xy.x, 1e-8);
+    EXPECT_NEAR(c.xy.y, cInv.xy.y, 1e-8);
+
+    {
+        auto src = proj_create(m_ctxt, "EPSG:11378");
+        ObjectKeeper keeper_src(src);
+        ASSERT_NE(src, nullptr);
+        auto dst = proj_create(m_ctxt, "EPSG:4326");
+        ObjectKeeper keeper_dst(dst);
+        ASSERT_NE(dst, nullptr);
+        const char *const options[] = {"ONLY_BEST=YES", nullptr};
+        auto P2 =
+            proj_create_crs_to_crs_from_pj(m_ctxt, src, dst, nullptr, options);
+        ObjectKeeper keeper_P2(P2);
+        EXPECT_EQ(P2, nullptr);
+    }
+}
+
+// ---------------------------------------------------------------------------
+
 TEST_F(CApi, proj_create_crs_to_crs_coordinate_metadata_in_src) {
 
     auto P =
@@ -4894,6 +5057,31 @@ TEST_F(CApi, proj_create_crs_to_crs_coordinate_metadata_in_src) {
     coord = proj_trans(P, PJ_FWD, coord);
     EXPECT_NEAR(coord.xyzt.x, -30.0000026655, 1e-10);
     EXPECT_NEAR(coord.xyzt.y, 129.9999983712, 1e-10);
+}
+
+// ---------------------------------------------------------------------------
+
+TEST_F(CApi, proj_create_crs_to_crs_coordinate_metadata_in_src_normalized) {
+
+    auto P =
+        proj_create_crs_to_crs(m_ctxt, "ITRF2014@2025.0", "GDA2020", nullptr);
+    ObjectKeeper keeper_P(P);
+    ASSERT_NE(P, nullptr);
+    auto Pnormalized = proj_normalize_for_visualization(m_ctxt, P);
+    ObjectKeeper keeper_Pnormalized(Pnormalized);
+    ASSERT_NE(Pnormalized, nullptr);
+
+    // Same as proj_create_crs_to_crs_coordinate_metadata_in_src, in
+    // longitude, latitude order
+    PJ_COORD coord;
+    coord.xyzt.x = 130;
+    coord.xyzt.y = -30;
+    coord.xyzt.z = 0;
+    coord.xyzt.t = HUGE_VAL;
+
+    coord = proj_trans(Pnormalized, PJ_FWD, coord);
+    EXPECT_NEAR(coord.xyzt.x, 129.9999983712, 1e-10);
+    EXPECT_NEAR(coord.xyzt.y, -30.0000026655, 1e-10);
 }
 
 // ---------------------------------------------------------------------------

@@ -11653,6 +11653,42 @@ TEST(operation, createOperation_point_motion_operation_nkg) {
 
 // ---------------------------------------------------------------------------
 
+TEST(operation, createOperation_coordinate_metadata_normalizeForVisualization) {
+    auto dbContext = DatabaseContext::create();
+    auto factory = AuthorityFactory::create(dbContext, "EPSG");
+    // ITRF2014
+    auto sourceCRS = factory->createCoordinateReferenceSystem("9000");
+    auto crs_2025 = CoordinateMetadata::create(sourceCRS, 2025.0, dbContext);
+    // GDA2020
+    auto targetCRS = factory->createCoordinateReferenceSystem("7844");
+    auto ctxt = CoordinateOperationContext::create(
+        AuthorityFactory::create(dbContext, std::string()), nullptr, 0);
+    ctxt->setSpatialCriterion(
+        CoordinateOperationContext::SpatialCriterion::PARTIAL_INTERSECTION);
+    auto list = CoordinateOperationFactory::create()->createOperations(
+        crs_2025, targetCRS, ctxt);
+    ASSERT_GE(list.size(), 1U);
+
+    auto op = list[0]->normalizeForVisualization();
+    ASSERT_TRUE(op->sourceCoordinateEpoch().has_value());
+    EXPECT_EQ(op->sourceCoordinateEpoch()->coordinateEpoch().value(), 2025.0);
+    EXPECT_FALSE(op->targetCoordinateEpoch().has_value());
+    EXPECT_EQ(
+        op->exportToPROJString(PROJStringFormatter::create().get()),
+        "+proj=pipeline "
+        "+step +proj=set +v_4=2025 "
+        "+step +proj=unitconvert +xy_in=deg +xy_out=rad "
+        "+step +proj=cart +ellps=GRS80 "
+        "+step +proj=helmert +x=0 +y=0 +z=0 +rx=0 +ry=0 +rz=0 +s=0 "
+        "+dx=0 +dy=0 +dz=0 +drx=0.00150379 +dry=0.00118346 "
+        "+drz=0.00120716 +ds=0 +t_epoch=2020 +convention=coordinate_frame "
+        "+step +inv +proj=cart +ellps=GRS80 "
+        "+step +proj=unitconvert +xy_in=rad +xy_out=deg "
+        "+step +proj=set +v_4=2025");
+}
+
+// ---------------------------------------------------------------------------
+
 TEST(operation,
      createOperation_compound_to_compound_with_point_motion_operation) {
     auto dbContext = DatabaseContext::create();
@@ -12344,6 +12380,185 @@ TEST(operation, createOperation_defmodel_from_database) {
               "+step +proj=set +v_4=2026 "
               "+step +proj=unitconvert +xy_in=rad +z_in=m +xy_out=deg +z_out=m "
               "+step +proj=axisswap +order=2,1");
+}
+
+// ---------------------------------------------------------------------------
+
+TEST(operation, engineeringCRS_to_other_CRS_through_intermediate_context) {
+    auto authFactory =
+        AuthorityFactory::create(DatabaseContext::create(), "EPSG");
+    auto ctxt = CoordinateOperationContext::create(authFactory, nullptr, 0.0);
+    ctxt->setSpatialCriterion(
+        CoordinateOperationContext::SpatialCriterion::PARTIAL_INTERSECTION);
+
+    const auto createOps = [&](const std::string &srcCode,
+                               const std::string &tgtCode) {
+        return CoordinateOperationFactory::create()->createOperations(
+            authFactory->createCoordinateReferenceSystem(srcCode),
+            authFactory->createCoordinateReferenceSystem(tgtCode), ctxt);
+    };
+    const auto bestOpName = [&](const std::string &srcCode,
+                                const std::string &tgtCode) {
+        const auto list = createOps(srcCode, tgtCode);
+        return list.empty() ? std::string() : list[0]->nameStr();
+    };
+
+    // Heathrow Airport Grid (EPSG:11378) is only related to
+    // OSGB36 / British National Grid (EPSG:27700), by EPSG:11388
+    const std::string heathrowGridToOSGB36 =
+        "Inverse of OSGB36 / British National Grid to Heathrow Airport Grid "
+        "(1) + Inverse of British National Grid";
+    const std::string heathrowGridToOSGB36PROJ =
+        "+proj=pipeline "
+        "+step +inv +proj=affine +xoff=-504786.4675 +s11=0.999912071814854 "
+        "+s12=0.0263656990790156 +yoff=-156728.1037 "
+        "+s21=-0.0263656990790156 +s22=0.999912071814854 "
+        "+step +inv +proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 "
+        "+x_0=400000 +y_0=-100000 +ellps=airy "
+        "+step +proj=unitconvert +xy_in=rad +xy_out=deg "
+        "+step +proj=axisswap +order=2,1";
+    {
+        auto list = createOps("11378", "4277");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(), heathrowGridToOSGB36);
+        EXPECT_FALSE(list[0]->hasBallparkTransformation());
+        EXPECT_EQ(
+            list[0]->exportToPROJString(PROJStringFormatter::create().get()),
+            heathrowGridToOSGB36PROJ);
+    }
+    {
+        auto list = createOps("4277", "11378");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(),
+                  "British National Grid + OSGB36 / British National Grid to "
+                  "Heathrow Airport Grid (1)");
+        EXPECT_EQ(list[0]->inverse()->exportToPROJString(
+                      PROJStringFormatter::create().get()),
+                  heathrowGridToOSGB36PROJ);
+    }
+    {
+        auto list = createOps("11378", "4326");
+        ASSERT_GE(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(),
+                  heathrowGridToOSGB36 + " + OSGB36 to WGS 84 (6)");
+        EXPECT_FALSE(list[0]->hasBallparkTransformation());
+    }
+    EXPECT_EQ(bestOpName("11378", "4979"),
+              heathrowGridToOSGB36 + " + OSGB36 to WGS 84 (6)");
+    EXPECT_EQ(bestOpName("11378", "4978"),
+              heathrowGridToOSGB36 +
+                  " + OSGB36 to WGS 84 (6) + Conversion from WGS 84 (geog2D) "
+                  "to WGS 84 (geocentric)");
+    EXPECT_EQ(bestOpName("11378", "32630"),
+              heathrowGridToOSGB36 + " + OSGB36 to WGS 84 (6) + UTM zone 30N");
+
+    // Christmas Island Grid 1985 (EPSG:6715) is related to
+    // GDA94 / MGA zone 48 (EPSG:28348) by EPSG:6724
+    const std::string cig85ToGDA94 = "CIG85 to GDA94 / MGA zone 48 + Inverse "
+                                     "of Map Grid of Australia zone 48";
+    EXPECT_EQ(bestOpName("6715", "4939"),
+              cig85ToGDA94 +
+                  " + Null geographic offset from GDA94 (geog2D) to GDA94 "
+                  "(geog3D)");
+    EXPECT_EQ(bestOpName("6715", "32748"),
+              cig85ToGDA94 + " + GDA94 to WGS 84 (1) + UTM zone 48S");
+    EXPECT_EQ(bestOpName("6715", "7848"),
+              cig85ToGDA94 +
+                  " + GDA94 to GDA2020 (1) + Map Grid of Australia zone 48");
+
+    // Tombak LNG Plant Grid (EPSG:5817), with axes rotated by 45 degrees, is
+    // related to Nakhl-e Ghanem / UTM zone 39N (EPSG:3307) by EPSG:15747
+    const std::string tombakGridToNakhleGhanem =
+        "Tombak LNG Plant Grid to Nakhl-e Ghanem / UTM zone 39N (1) + "
+        "Inverse of UTM zone 39N";
+    {
+        auto list = createOps("5817", "4693");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(), tombakGridToNakhleGhanem);
+        EXPECT_EQ(
+            list[0]->exportToPROJString(PROJStringFormatter::create().get()),
+            "+proj=pipeline "
+            "+step +proj=affine +xoff=611267.2865 +s11=0.706946150001807 "
+            "+s12=-0.706946150001807 +yoff=3046565.8255 "
+            "+s21=0.706946150001807 +s22=0.706946150001807 "
+            "+step +inv +proj=utm +zone=39 +ellps=WGS84 "
+            "+step +proj=unitconvert +xy_in=rad +xy_out=deg "
+            "+step +proj=axisswap +order=2,1");
+    }
+    EXPECT_EQ(bestOpName("5817", "32639"),
+              tombakGridToNakhleGhanem +
+                  " + Nakhl-e Ghanem to WGS 84 (6) + UTM zone 39N");
+
+    // Astra Minas Grid (EPSG:5800) is related to the (north, east)
+    // Campo Inchauspe / Argentina 2 (EPSG:22192) by EPSG:1035
+    const std::string astraMinasGridToCampoInchauspe =
+        "Astra Minas to Campo Inchauspe / Argentina 2 (1) + Inverse of "
+        "Argentina zone 2";
+    {
+        auto list = createOps("5800", "4221");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(), astraMinasGridToCampoInchauspe);
+        EXPECT_EQ(
+            list[0]->exportToPROJString(PROJStringFormatter::create().get()),
+            "+proj=pipeline "
+            "+step +proj=affine +xoff=2610200.48 +s11=0.0190520248964033 "
+            "+s12=-0.999818493701405 +yoff=4905282.73 "
+            "+s21=0.999818493701405 +s22=0.0190520248964033 "
+            "+step +proj=axisswap +order=2,1 "
+            "+step +inv +proj=tmerc +lat_0=-90 +lon_0=-69 +k=1 "
+            "+x_0=2500000 +y_0=0 +ellps=intl "
+            "+step +proj=unitconvert +xy_in=rad +xy_out=deg "
+            "+step +proj=axisswap +order=2,1");
+    }
+
+    // A direct operation is used as is
+    {
+        auto list = createOps("5800", "22192");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(),
+                  "Astra Minas to Campo Inchauspe / Argentina 2 (1)");
+    }
+
+    // Target CRS whose area of use does not intersect the grid are only
+    // reached when CRS extents are ignored
+    EXPECT_TRUE(createOps("11378", "32631").empty());
+    EXPECT_TRUE(createOps("6715", "28349").empty());
+    EXPECT_TRUE(createOps("6715", "4348").empty());
+    EXPECT_TRUE(createOps("5817", "32640").empty());
+    EXPECT_TRUE(createOps("5800", "22193").empty());
+    ctxt->setSourceAndTargetCRSExtentUse(
+        CoordinateOperationContext::SourceTargetCRSExtentUse::NONE);
+    EXPECT_EQ(bestOpName("11378", "32631"),
+              heathrowGridToOSGB36 + " + OSGB36 to WGS 84 (6) + UTM zone 31N");
+    {
+        auto list = createOps("6715", "28349");
+        ASSERT_EQ(list.size(), 1U);
+        EXPECT_EQ(list[0]->nameStr(),
+                  cig85ToGDA94 + " + Map Grid of Australia zone 49");
+        EXPECT_EQ(
+            list[0]->exportToPROJString(PROJStringFormatter::create().get()),
+            "+proj=pipeline "
+            "+step +proj=affine +xoff=550015 +yoff=8780001 "
+            "+step +inv +proj=utm +zone=48 +south +ellps=GRS80 "
+            "+step +proj=utm +zone=49 +south +ellps=GRS80");
+    }
+    EXPECT_EQ(bestOpName("6715", "4348"),
+              cig85ToGDA94 + " + Conversion from GDA94 to GDA94 (geocentric)");
+    EXPECT_EQ(bestOpName("5817", "32640"),
+              tombakGridToNakhleGhanem +
+                  " + Nakhl-e Ghanem to WGS 84 (6) + UTM zone 40N");
+    EXPECT_EQ(bestOpName("5800", "22193"),
+              astraMinasGridToCampoInchauspe + " + Argentina zone 3");
+    ctxt->setSourceAndTargetCRSExtentUse(
+        CoordinateOperationContext::SourceTargetCRSExtentUse::SMALLEST);
+
+    // Barcelona Grid B1 (EPSG:5801) has no registered operation
+    EXPECT_TRUE(createOps("5801", "4326").empty());
+
+    // No intermediate CRS allowed
+    ctxt->setAllowUseIntermediateCRS(
+        CoordinateOperationContext::IntermediateCRSUse::NEVER);
+    EXPECT_TRUE(createOps("11378", "4277").empty());
 }
 
 // ---------------------------------------------------------------------------

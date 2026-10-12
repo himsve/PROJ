@@ -422,10 +422,20 @@ CoordinateOperation::normalizeForVisualization() const {
         throw util::UnsupportedOperationException(
             "Cannot retrieve source or target CRS");
     }
-    const bool swapSource =
-        l_sourceCRS->mustAxisOrderBeSwitchedForVisualization();
-    const bool swapTarget =
-        l_targetCRS->mustAxisOrderBeSwitchedForVisualization();
+    bool swapSource = l_sourceCRS->mustAxisOrderBeSwitchedForVisualization();
+    bool swapTarget = l_targetCRS->mustAxisOrderBeSwitchedForVisualization();
+
+    // A CRS without horizontal axes lets horizontal coordinates pass through
+    // in the axis order of the other end, so both ends must be swapped
+    // together to avoid leaving a residual axis swap in the pipeline.
+    const bool sourceHasNoHorizontalAxes = l_sourceCRS->hasNoHorizontalAxes();
+    const bool targetHasNoHorizontalAxes = l_targetCRS->hasNoHorizontalAxes();
+    if (targetHasNoHorizontalAxes && !sourceHasNoHorizontalAxes) {
+        swapTarget = swapSource;
+    } else if (sourceHasNoHorizontalAxes && !targetHasNoHorizontalAxes) {
+        swapSource = swapTarget;
+    }
+
     auto l_this = NN_NO_CHECK(std::dynamic_pointer_cast<CoordinateOperation>(
         shared_from_this().as_nullable()));
     if (!swapSource && !swapTarget) {
@@ -477,8 +487,11 @@ CoordinateOperation::normalizeForVisualization() const {
         }
     }
 
-    return ConcatenatedOperation::create(properties, flattenOps,
-                                         coordinateOperationAccuracies());
+    auto op = ConcatenatedOperation::create(properties, flattenOps,
+                                            coordinateOperationAccuracies());
+    op->setSourceCoordinateEpoch(sourceCoordinateEpoch());
+    op->setTargetCoordinateEpoch(targetCoordinateEpoch());
+    return op;
 }
 
 // ---------------------------------------------------------------------------
@@ -4104,25 +4117,33 @@ bool SingleOperation::exportToPROJStringGeneric(
                     "Can apply Cartesian grid offsets only to ProjectedCRS or "
                     "EngineeringCRS");
             }
+            return engineeringCRS;
         };
 
         auto l_sourceCRS = sourceCRS();
         auto sourceCRSProj =
             dynamic_cast<const crs::ProjectedCRS *>(l_sourceCRS.get());
+        const crs::EngineeringCRS *sourceCRSEng = nullptr;
         if (!sourceCRSProj) {
-            checkIfCompatEngineeringCRS(l_sourceCRS);
+            sourceCRSEng = checkIfCompatEngineeringCRS(l_sourceCRS);
         }
 
         auto l_targetCRS = targetCRS();
         auto targetCRSProj =
             dynamic_cast<const crs::ProjectedCRS *>(l_targetCRS.get());
+        const crs::EngineeringCRS *targetCRSEng = nullptr;
         if (!targetCRSProj) {
-            checkIfCompatEngineeringCRS(l_targetCRS);
+            targetCRSEng = checkIfCompatEngineeringCRS(l_targetCRS);
         }
 
         if (sourceCRSProj) {
             formatter->startInversion();
             sourceCRSProj->addUnitConvertAndAxisSwap(formatter, false);
+            formatter->stopInversion();
+        } else {
+            formatter->startInversion();
+            crs::ProjectedCRS::addUnitConvertAndAxisSwap(
+                sourceCRSEng->coordinateSystem()->axisList(), formatter, false);
             formatter->stopInversion();
         }
 
@@ -4134,6 +4155,9 @@ bool SingleOperation::exportToPROJStringGeneric(
 
         if (targetCRSProj) {
             targetCRSProj->addUnitConvertAndAxisSwap(formatter, false);
+        } else {
+            crs::ProjectedCRS::addUnitConvertAndAxisSwap(
+                targetCRSEng->coordinateSystem()->axisList(), formatter, false);
         }
 
         return true;
