@@ -10,13 +10,14 @@ permissions:
 
 jobs:
   sync:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
   
     steps:
       - name: Sync fork
         uses: tgymnich/fork-sync@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          #github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{secrets.FORK_SYNC_PAT }}
           upstream_repository: OSGeo/PROJ
           target_branch: master
 
