@@ -2,7 +2,7 @@ name: Sync Fork
 
 on:
   schedule:
-    - cron: '0 15 * * *'
+     - cron: '*/5 * * * *'
   workflow_dispatch:
   
 permissions:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   sync:
     runs-on: windows-latest
-
+  
     steps:
       - name: Sync fork
         uses: tgymnich/fork-sync@v2
