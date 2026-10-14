@@ -13,7 +13,7 @@ operation +proj=pipeline \
           +step +proj=axisswap +order=2,1
 
 tolerance   0.0001 m
-accept      60.7599999985951 4.800000008750965 45.230
-expect      60.7599999985951 4.800000008750965 45.245
+accept      60.7599999985951 4.800000008750965 45.245
+expect      60.7599999985951 4.800000008750965 45.230
 
 </gie-strict>
