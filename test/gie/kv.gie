@@ -1,0 +1,19 @@
+<gie-strict>
+
+# -------------------------------------------------------------------------------
+#                             NN2000:2018-NN2000:2025
+# -------------------------------------------------------------------------------
+
+operation +proj=pipeline \
+          +step +proj=axisswap +order=2,1 \
+          +step +proj=unitconvert +xy_in=deg +xy_out=rad \
+          +step +proj=vgridshift +grids=no_kv_HREF2018B_NN2000_EUREF89.tif +multiplier=1 \
+          +step +inv +proj=vgridshift +grids=no_kv_HREF2025A_NN2000_EUREF89.tif +multiplier=1 \
+          +step +proj=unitconvert +xy_in=rad +xy_out=deg \
+          +step +proj=axisswap +order=2,1
+
+tolerance   0.0001 m
+accept      60.7599999985951 4.800000008750965 45.230
+expect      60.7599999985951 4.800000008750965 45.245
+
+</gie-strict>
