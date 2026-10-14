@@ -95,6 +95,7 @@ endif()
 if(TIFF_ENABLED AND CURL_ENABLED AND RUN_NETWORK_DEPENDENT_TESTS)
 proj_add_gie_network_dependent_test("nkg" "gie/nkg.gie" 3.0)
 proj_add_gie_network_dependent_test("epsg_grid" "gie/epsg_grid.gie" 4.0)
+proj_add_gie_network_dependent_test("kv" "gie/kv.gie" 5.0)
 endif()
 
 # GIGS tests. Uncommented tests are expected to fail due to issues with
