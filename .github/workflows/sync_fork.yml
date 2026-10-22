@@ -19,10 +19,26 @@ jobs:
           fetch-depth: 0
 
       - name: Sync fork with upstream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git remote remove upstream 2>/dev/null || true
           git remote add upstream https://github.com/OSGeo/PROJ.git
           git fetch upstream
           git checkout master
+
+          if [ "$(git rev-list --left-right --count origin/master...upstream/master)" != "0 0" ]; then
+            echo "origin/master differs from upstream/master; triggering windows workflow"
+            curl -L \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/windows.yml/dispatches \
+              -d '{"ref":"master"}'
+          else
+            echo "origin/master matches upstream/master; no Windows run needed"
+          fi
+
           git merge --ff-only upstream/master
           git push origin master
