@@ -5755,9 +5755,11 @@
 		+ellps=GRS80 \
 	+step +proj=xyzgridshift +grids=no_kv_NKGETRF14_EPSG7922_2000.tif \
 	+step +proj=deformation +dt=-5 +grids=eur_nkg_nkgrf17vel.tif +ellps=GRS80
-
+	
+	
+	tolerance   0.001 m
+	
 	accept 3282149.565566   255187.332947   5444559.194921  2020
 	expect 3282149.074759   255187.721039   5444559.524664  2020
-
 
 </gie-strict>
